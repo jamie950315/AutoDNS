@@ -451,8 +451,8 @@ namespace AutoDNS
             Log("\r\n=== 清除 DNS 快取 ===");
             int ec = await RunProcessAsync(new ProcessStartInfo
             {
-                FileName = "ipconfig",
-                Arguments = "/flushdns",
+                FileName = "cmd.exe",
+                Arguments = "/c chcp 65001 >nul && ipconfig /flushdns",
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
@@ -461,9 +461,7 @@ namespace AutoDNS
                 StandardErrorEncoding = Encoding.UTF8
             }, prefix: "ipconfig /flushdns");
 
-            
             MessageBox.Show(ec == 0 ? "DNS 快取已清除" : "DNS 快取清除可能失敗，請查看紀錄。", "AutoDNS", MessageBoxButtons.OK, ec == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-            
         }
 
         private async Task<int> RunNetshAsync(string args)
