@@ -85,11 +85,13 @@ namespace AutoDNS
         private CheckBox chkDhcp;
         private GroupBox grpProvider;
         private RadioButton rbHiNet, rbCloudflare, rbGoogle;
-        private Button btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush;
+        private Button btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, btnDoneSelect;
         private TextBox txtLog;
 
         // Logs toggle state (default OFF)
         private bool logsEnabled = false;
+
+        private bool isInInterface = false;
 
         // Profiles
         private readonly DnsProfile AdGuard = new("AdGuard", "94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff");
@@ -97,35 +99,41 @@ namespace AutoDNS
         private readonly DnsProfile Cloudflare = new("Cloudflare", "1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001");
         private readonly DnsProfile Google = new("Google", "8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844");
 
+        private Label lblIf = new Label { Left = 450, Top = 15, Width = 540, Text = "選擇要套用的網路介面 (乙太網路 / Wi‑Fi / 進階可選)：" };
+
         public MainForm()
         {
             Text = "AutoDNS";
-            Width = 980; Height = 400; StartPosition = FormStartPosition.CenterScreen;
+            Width = 460; Height = 400; StartPosition = FormStartPosition.CenterScreen;
 
-            var lblIf = new Label { Left = 15, Top = 15, Width = 540, Text = "選擇要套用的網路介面 (乙太網路 / Wi‑Fi / 進階可選)：" };
-            clbIfaces = new CheckedListBox { Left = 15, Top = 40, Width = 500, Height = 260, CheckOnClick = true };
-            chkSelectAll = new CheckBox { Left = 15, Top = 305, Width = 250, Text = "全選目前運作中的介面" };
-            chkIncludeAdvanced = new CheckBox { Left = 270, Top = 305, Width = 250, Text = "包含進階/虛擬/撥接介面" };
+            // 設定介面選擇區
+            clbIfaces = new CheckedListBox { Left = 450, Top = 40, Width = 500, Height = 260, CheckOnClick = true };    //Select network interfaces
+            chkSelectAll = new CheckBox { Left = 450, Top = 305, Width = 200, Text = "全選目前運作中的介面" };
+            chkIncludeAdvanced = new CheckBox { Left = 650, Top = 305, Width = 200, Text = "包含進階/虛擬/撥接介面" };
+            btnDoneSelect = new Button { Left = 850, Top = 302, Width = 100, Height = 25, Text = "完成選擇" };
+            btnDoneSelect.Click += (s, e) => doneSelect();
 
-            chkAdGuard = new CheckBox { Left = 540, Top = 40, Width = 400, Text = "使用 AdGuard DNS (94.140.14.14)" };
+            // 設定 DNS 提供者選項
+            chkAdGuard = new CheckBox { Left = 15, Top = 40, Width = 400, Text = "使用 AdGuard DNS (94.140.14.14)" };
             chkAdGuard.Checked = true;
             chkAdGuard.CheckedChanged += (s, e) => { if (chkAdGuard.Checked) chkDhcp.Checked = false; UpdateProviderEnable(); };
 
-            chkDhcp = new CheckBox { Left = 540, Top = 70, Width = 300, Text = "自動取得 DNS (DHCP)" };
+            chkDhcp = new CheckBox { Left = 15, Top = 70, Width = 300, Text = "自動取得 DNS (DHCP)" };
             chkDhcp.CheckedChanged += (s, e) => { if (chkDhcp.Checked) chkAdGuard.Checked = false; UpdateProviderEnable(); };
 
-            grpProvider = new GroupBox { Left = 535, Top = 105, Width = 415, Height = 150, Text = "未勾 AdGuard 與 DHCP 時，改用以下 DNS：" };
+            grpProvider = new GroupBox { Left = 15, Top = 105, Width = 415, Height = 150, Text = "未勾 AdGuard 與 DHCP 時，改用以下 DNS：" };
             rbHiNet = new RadioButton { Left = 20, Top = 25, Width = 200, Text = "HiNet(168.95.1.1)" };
             rbCloudflare = new RadioButton { Left = 20, Top = 55, Width = 200, Text = "Cloudflare (1.1.1.1)" };
             rbGoogle = new RadioButton { Left = 20, Top = 85, Width = 200, Text = "Google (8.8.8.8)" };
             rbCloudflare.Checked = true;
             grpProvider.Controls.AddRange(new Control[] { rbHiNet, rbCloudflare, rbGoogle });
 
-            btnApply = new Button { Left = 540, Top = 265, Width = 97, Height = 30, Text = "套用設定" };
-            btnRefresh = new Button { Left = 647, Top = 265, Width = 98, Height = 30, Text = "掃描介面卡" };
-            btnShow = new Button { Left = 755, Top = 265, Width = 97, Height = 30, Text = "顯示目前 DNS" };
-            btnToggleLogs = new Button { Left = 862, Top = 265, Width = 98, Height = 30, Text = "顯示紀錄：關" };
-            btnFlush = new Button { Left = 540, Top = 305, Width = 420, Height = 30, Text = "清除 DNS 快取 (ipconfig /flushdns)" };
+            // 設定按鈕
+            btnApply = new Button { Left = 15, Top = 265, Width = 97, Height = 30, Text = "套用設定" };
+            btnRefresh = new Button { Left = 122, Top = 265, Width = 98, Height = 30, Text = "掃描介面卡" };
+            btnShow = new Button { Left = 230, Top = 265, Width = 97, Height = 30, Text = "顯示目前 DNS" };
+            btnToggleLogs = new Button { Left = 337, Top = 265, Width = 98, Height = 30, Text = "顯示紀錄：關" };
+            btnFlush = new Button { Left = 15, Top = 305, Width = 420, Height = 30, Text = "清除 DNS 快取 (ipconfig /flushdns)" };
 
             btnApply.Click += async (s, e) => await ApplyAsync();
             btnRefresh.Click += (s, e) => InitInterfaces();
@@ -134,18 +142,19 @@ namespace AutoDNS
             btnToggleLogs.Click += (s, e) => ToggleLogs();
             btnFlush.Click += async (s, e) => await FlushDnsAsync();
 
+            // Bottom label
             var lblInfo = new Label
             {
                 Left = 15,
                 Top = 340,
                 Width = 940,
-                Height = 40,
-                Text = "提示：需要系統管理員權限。若設定未生效，可嘗試重新連線或清除 DNS 快取。"
+                Height = 30,
+                Text = "提示：需要系統管理員權限。若設定未生效可嘗試重新連線或清除 DNS 快取。"
             };
-            txtLog = new TextBox { Left = 15, Top = 40, Width = 500, Height = 260, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
+            txtLog = new TextBox { Left = 450, Top = 40, Width = 500, Height = 260, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
             txtLog.Visible = false; // 預設：關閉紀錄（不顯示）
 
-            Controls.AddRange(new Control[] { lblIf, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, lblInfo, txtLog });
+            Controls.AddRange(new Control[] { lblIf, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, lblInfo, txtLog, btnDoneSelect });
 
             Load += (_, __) => InitInterfaces();
             chkSelectAll.CheckedChanged += (s, e) => SelectAllUpInterfaces(chkSelectAll.Checked);
@@ -153,11 +162,81 @@ namespace AutoDNS
             UpdateProviderEnable();
         }
 
+        private void controlInterfaceUI(bool isVisibleUI)
+        {
+            if (isVisibleUI)
+            {
+                lblIf.Visible = true;
+                clbIfaces.Visible = true;
+                chkSelectAll.Visible = true;
+                chkIncludeAdvanced.Visible = true;
+                btnDoneSelect.Visible = true;
+            }
+            else
+            {
+                lblIf.Visible = false;
+                clbIfaces.Visible = false;
+                chkSelectAll.Visible = false;
+                chkIncludeAdvanced.Visible = false;
+                btnDoneSelect.Visible = false;
+            }
+        }
+
+        private void expandWindow(bool expand)
+        {
+            if (expand)
+            {
+                if (Width != 980)
+                {
+                    Left = this.Left - 260; //move left to center the expanded window
+                }
+                Width = 980;
+            }
+            else
+            {
+                if (Width != 460)
+                {
+                    Left = this.Left + 260; //move right to center the collapsed window
+                }
+                Width = 460;
+            }
+
+        }
+
+
+        private void doneSelect()
+        {
+            isInInterface = false;
+            controlInterfaceUI(false);
+            if (logsEnabled)
+            {
+                txtLog.Visible = true;
+            }
+            else
+            {
+                expandWindow(false);
+                txtLog.Visible = false;
+            }
+        }
+
         private void ToggleLogs()
         {
             logsEnabled = !logsEnabled;
             txtLog.Visible = logsEnabled;
-            clbIfaces.Visible = !logsEnabled;
+            if (logsEnabled)
+            {
+                expandWindow(true);
+                controlInterfaceUI(false);
+            }
+            else if (isInInterface) 
+            {
+                controlInterfaceUI(true);
+            }
+            else
+            {
+                expandWindow(false);
+            }
+
             btnToggleLogs.Text = logsEnabled ? "顯示紀錄：開" : "顯示紀錄：關";
         }
 
@@ -199,6 +278,10 @@ namespace AutoDNS
             // 若是由 btnRefresh 觸發，顯示提示訊息
             if (ActiveControl == btnRefresh)
             {
+                expandWindow(true);
+                txtLog.Visible = false; // 重新掃描後，隱藏紀錄視圖
+                controlInterfaceUI(true);
+                isInInterface = true;
                 MessageBox.Show($"已掃描 {clbIfaces.Items.Count} 個介面。\n" +
                     "請選擇要套用的介面，並點擊「套用設定」。\n" +
                     "若需要包含進階/虛擬介面，請勾選「包含進階/虛擬/撥接介面」。", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -305,7 +388,7 @@ namespace AutoDNS
                     await RunNetshAsync($"interface ipv6 set dnsservers name=\"{nic.Name}\" source=dhcp");
                 }
 
-                // 依你的要求：用 Get-DnsClientServerAddress {baseCmdIdx} -AddressFamily 做結果列印（驗證/紀錄）
+                // 用 Get-DnsClientServerAddress {baseCmdIdx} -AddressFamily 做結果列印（驗證/紀錄）
                 string baseCmdIdx = nic.IfIndex >= 0 ? $"-InterfaceIndex {nic.IfIndex}" : $"-InterfaceAlias '{EscapeForPS(nic.Name)}'";
                 await RunPowerShellAsync($"$a=(Get-DnsClientServerAddress {baseCmdIdx} -AddressFamily IPv4).ServerAddresses; Write-Host '(After DHCP) IPv4: ' + ($a -join ', ')");
                 await RunPowerShellAsync($"$b=(Get-DnsClientServerAddress {baseCmdIdx} -AddressFamily IPv6).ServerAddresses; Write-Host '(After DHCP) IPv6: ' + ($b -join ', ')");
@@ -408,7 +491,7 @@ namespace AutoDNS
 
         private async Task<int> RunPowerShellAsync(string command)
         {
-            // 使用 Out-String 讓輸出更一致；command 會在這層被包住
+
             string wrapped = "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; " + command;
             return await RunProcessAsync(new ProcessStartInfo
             {
