@@ -154,7 +154,7 @@ namespace AutoDNS
             txtLog = new TextBox { Left = 450, Top = 40, Width = 500, Height = 260, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
             txtLog.Visible = false; // 預設：關閉紀錄（不顯示）
 
-            Controls.AddRange(new Control[] { lblIf, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, lblInfo, txtLog, btnDoneSelect });
+            Controls.AddRange(new Control[] { lblIf, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, txtLog, btnDoneSelect });
 
             Load += (_, __) => InitInterfaces();
             chkSelectAll.CheckedChanged += (s, e) => SelectAllUpInterfaces(chkSelectAll.Checked);
