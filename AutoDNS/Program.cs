@@ -100,7 +100,7 @@ namespace AutoDNS
         public MainForm()
         {
             Text = "AutoDNS";
-            Width = 980; Height = 680; StartPosition = FormStartPosition.CenterScreen;
+            Width = 980; Height = 400; StartPosition = FormStartPosition.CenterScreen;
 
             var lblIf = new Label { Left = 15, Top = 15, Width = 540, Text = "選擇要套用的網路介面 (乙太網路 / Wi‑Fi / 進階可選)：" };
             clbIfaces = new CheckedListBox { Left = 15, Top = 40, Width = 500, Height = 260, CheckOnClick = true };
@@ -129,6 +129,7 @@ namespace AutoDNS
 
             btnApply.Click += async (s, e) => await ApplyAsync();
             btnRefresh.Click += (s, e) => InitInterfaces();
+            
             btnShow.Click += async (s, e) => await ShowDnsAsync();
             btnToggleLogs.Click += (s, e) => ToggleLogs();
             btnFlush.Click += async (s, e) => await FlushDnsAsync();
@@ -141,7 +142,7 @@ namespace AutoDNS
                 Height = 40,
                 Text = "提示：需要系統管理員權限。若設定未生效，可嘗試重新連線或清除 DNS 快取。"
             };
-            txtLog = new TextBox { Left = 15, Top = 385, Width = 945, Height = 220, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
+            txtLog = new TextBox { Left = 15, Top = 40, Width = 500, Height = 260, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
             txtLog.Visible = false; // 預設：關閉紀錄（不顯示）
 
             Controls.AddRange(new Control[] { lblIf, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, lblInfo, txtLog });
@@ -156,6 +157,7 @@ namespace AutoDNS
         {
             logsEnabled = !logsEnabled;
             txtLog.Visible = logsEnabled;
+            clbIfaces.Visible = !logsEnabled;
             btnToggleLogs.Text = logsEnabled ? "顯示紀錄：開" : "顯示紀錄：關";
         }
 
@@ -192,6 +194,14 @@ namespace AutoDNS
                 var item = new InterfaceItem { Name = nic.Name, Id = nic.Id, IfIndex = ifIndex };
                 bool shouldCheck = previouslyChecked.Contains(item.Id) || true; // 預設勾選
                 clbIfaces.Items.Add(item, shouldCheck);
+            }
+
+            // 若是由 btnRefresh 觸發，顯示提示訊息
+            if (ActiveControl == btnRefresh)
+            {
+                MessageBox.Show($"已掃描 {clbIfaces.Items.Count} 個介面。\n" +
+                    "請選擇要套用的介面，並點擊「套用設定」。\n" +
+                    "若需要包含進階/虛擬介面，請勾選「包含進階/虛擬/撥接介面」。", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 
