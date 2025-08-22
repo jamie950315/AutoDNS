@@ -280,6 +280,8 @@ namespace AutoDNS
             {
                 expandWindow(true);
                 txtLog.Visible = false; // 重新掃描後，隱藏紀錄視圖
+                logsEnabled = false;
+                btnToggleLogs.Text = logsEnabled ? "顯示紀錄：開" : "顯示紀錄：關";
                 controlInterfaceUI(true);
                 isInInterface = true;
                 MessageBox.Show($"已掃描 {clbIfaces.Items.Count} 個介面。\n" +
@@ -355,12 +357,8 @@ namespace AutoDNS
             }
 
             Log("\r\n完成。若應用程式/瀏覽器仍未生效，請嘗試重新連線或清除 DNS 快取：ipconfig /flushdns");
-
-            // 若未開啟紀錄視圖，使用 MessageBox 簡要提示切換到哪個 DNS
-            if (!logsEnabled)
-            {
-                MessageBox.Show($"已套用：{profile.Name} DNS", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
+            
+            MessageBox.Show($"已套用：{profile.Name} DNS", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private async Task SetDhcpAsync(List<InterfaceItem> selected)
@@ -395,10 +393,7 @@ namespace AutoDNS
             }
             Log("\r\n完成。若應用程式/瀏覽器仍未生效，請嘗試重新連線或清除 DNS 快取：ipconfig /flushdns");
 
-            if (!logsEnabled)
-            {
-                MessageBox.Show("已切換為自動取得 (DHCP)", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
+            MessageBox.Show("已切換為自動取得 (DHCP)", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private async Task ShowDnsAsync()
@@ -441,14 +436,12 @@ namespace AutoDNS
                     summarySb.AppendLine("IPv6: " + (v6.Count > 0 ? string.Join(", ", v6) : "(無)"));
                     summarySb.AppendLine();
                 }
-                if (!logsEnabled)
-                {
-                    var text = summarySb.ToString().Trim();
-                    if (string.IsNullOrWhiteSpace(text))
-                        MessageBox.Show("無法取得目前 DNS 設定，請開啟紀錄檢視詳細輸出。", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    else
-                        MessageBox.Show(text, "目前 DNS 設定", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
+                
+                var text = summarySb.ToString().Trim();
+                if (string.IsNullOrWhiteSpace(text))
+                MessageBox.Show("無法取得目前 DNS 設定，請開啟紀錄檢視詳細輸出。", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                else MessageBox.Show(text, "目前 DNS 設定", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
             }
             catch { }
         }
@@ -468,10 +461,9 @@ namespace AutoDNS
                 StandardErrorEncoding = Encoding.UTF8
             }, prefix: "ipconfig /flushdns");
 
-            if (!logsEnabled)
-            {
-                MessageBox.Show(ec == 0 ? "DNS 快取已清除" : "DNS 快取清除可能失敗，請查看紀錄。", "AutoDNS", MessageBoxButtons.OK, ec == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
-            }
+            
+            MessageBox.Show(ec == 0 ? "DNS 快取已清除" : "DNS 快取清除可能失敗，請查看紀錄。", "AutoDNS", MessageBoxButtons.OK, ec == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            
         }
 
         private async Task<int> RunNetshAsync(string args)
