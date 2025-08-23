@@ -334,10 +334,10 @@ namespace AutoDNS
 
                 // 按鈕：一般按鈕走暗色，主要動作按鈕走 Accent
                 if (btnApply != null) StyleButton(btnApply, AccentBg, Color.White, AccentHover, AccentDown);
-                if (btnFlush != null) StyleButton(btnFlush, AccentBg, Color.White, AccentHover, AccentDown);
+                if (btnClearLogs != null) StyleButton(btnClearLogs, AccentBg, Color.White, AccentHover, AccentDown);
                 if (btnDoneSelect != null) StyleButton(btnDoneSelect, AccentBg, Color.White, AccentHover, AccentDown);
 
-                foreach (var b in new[] { btnRefresh, btnShow, btnToggleLogs })
+                foreach (var b in new[] { btnRefresh, btnShow, btnToggleLogs, btnFlush })
                 {
                     if (b != null) StyleButton(b, BtnBg, TextFg, BtnHover, BtnDown);
                 }
@@ -349,10 +349,10 @@ namespace AutoDNS
             Width = 460; Height = 400; StartPosition = FormStartPosition.CenterScreen;
 
             // 設定介面選擇區
-            clbIfaces = new CheckedListBox { Left = 450, Top = 40, Width = 500, Height = 260, CheckOnClick = true };    //Select network interfaces
+            clbIfaces = new CheckedListBox { Left = 450, Top = 40, Width = 500, Height = 255, CheckOnClick = true };    //Select network interfaces
             chkSelectAll = new CheckBox { Left = 450, Top = 305, Width = 200, Text = "全選目前運作中的介面" };
             chkIncludeAdvanced = new CheckBox { Left = 650, Top = 305, Width = 200, Text = "包含進階/虛擬/撥接介面" };
-            btnDoneSelect = new Button { Left = 850, Top = 302, Width = 100, Height = 25, Text = "完成選擇" };
+            btnDoneSelect = new Button { Left = 850, Top = 305, Width = 100, Height = 30, Text = "完成選擇" };
             btnDoneSelect.Click += (s, e) => doneSelect();
 
             // 設定 DNS 提供者選項
@@ -371,11 +371,11 @@ namespace AutoDNS
             grpProvider.Controls.AddRange(new Control[] { rbHiNet, rbCloudflare, rbGoogle });
 
             // 設定按鈕
-            btnApply = new Button { Left = 15, Top = 265, Width = 97, Height = 30, Text = "套用設定" };
+            btnFlush = new Button { Left = 15, Top = 265, Width = 97, Height = 30, Text = "清除 DNS 快取" };
             btnRefresh = new Button { Left = 122, Top = 265, Width = 98, Height = 30, Text = "掃描介面卡" };
             btnShow = new Button { Left = 230, Top = 265, Width = 97, Height = 30, Text = "顯示目前 DNS" };
             btnToggleLogs = new Button { Left = 337, Top = 265, Width = 98, Height = 30, Text = "顯示紀錄：關" };
-            btnFlush = new Button { Left = 15, Top = 305, Width = 420, Height = 30, Text = "清除 DNS 快取 (ipconfig /flushdns)" };
+            btnApply = new Button { Left = 15, Top = 305, Width = 420, Height = 30, Text = "套用設定" };
 
             btnApply.Click += async (s, e) => await ApplyAsync();
             btnRefresh.Click += (s, e) => InitInterfaces();
@@ -395,10 +395,14 @@ namespace AutoDNS
             };
 
             //log output box
-            txtLog = new TextBox { Left = 450, Top = 15, Width = 500, Height = 280, Multiline = true, ReadOnly = true };
-            txtLog.Visible = false;    // 預設：關閉紀錄（不顯示）
+            txtLog = new TextBox { Left = 450, Top = 40, Width = 500, Height = 255, Multiline = true, ReadOnly = true };
+            txtLog.ScrollBars = ScrollBars.Vertical;
+            txtLog.Font = new Font("Consolas", 10);
+            btnClearLogs = new Button { Left = 450, Top = 305, Width = 500, Height = 30, Text = "清除輸出紀錄" };
+            btnClearLogs.Click += (s, e) => txtLog.Clear();
 
-            Controls.AddRange(new Control[] { lblIf, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, txtLog, btnDoneSelect, btnClearLogs });
+
+            Controls.AddRange(new Control[] { lblIf, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, txtLog, btnDoneSelect, btnClearLogs, logTitle });
 
 
             ApplyDarkMode();
@@ -407,6 +411,7 @@ namespace AutoDNS
             chkSelectAll.CheckedChanged += (s, e) => SelectAllUpInterfaces(chkSelectAll.Checked);
             chkIncludeAdvanced.CheckedChanged += (s, e) => InitInterfaces();
             controlInterfaceUI(false);
+            controlLogUI(false);
             UpdateProviderEnable();
         }
 
@@ -444,6 +449,7 @@ namespace AutoDNS
                 txtLog.Visible = false;
                 btnClearLogs.Visible = false;
             }
+            btnToggleLogs.Text = isLogVisible ? "顯示紀錄：開" : "顯示紀錄：關";
         }
 
         private void expandWindow(bool expand)
@@ -480,12 +486,12 @@ namespace AutoDNS
             controlInterfaceUI(false);
             if (logsEnabled)
             {
-                txtLog.Visible = true;
+                controlLogUI(true);
             }
             else
             {
                 expandWindow(false);
-                txtLog.Visible = false;
+                controlLogUI(false);
             }
         }
 
@@ -507,7 +513,6 @@ namespace AutoDNS
                 expandWindow(false);
             }
 
-            btnToggleLogs.Text = logsEnabled ? "顯示紀錄：開" : "顯示紀錄：關";
         }
 
         //dns provider light mode
@@ -550,9 +555,8 @@ namespace AutoDNS
             if (ActiveControl == btnRefresh)
             {
                 expandWindow(true);
-                txtLog.Visible = false; // 重新掃描後，隱藏紀錄視圖
+                controlLogUI(false);
                 logsEnabled = false;
-                btnToggleLogs.Text = logsEnabled ? "顯示紀錄：開" : "顯示紀錄：關";
                 controlInterfaceUI(true);
                 isInInterface = true;
                 Program.ShowDarkInfo(this, "已掃描 " + clbIfaces.Items.Count + " 個介面。\n" +
