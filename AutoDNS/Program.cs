@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing.Text;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -237,9 +238,14 @@ namespace AutoDNS
         private readonly DnsProfile Cloudflare = new("Cloudflare", "1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001");
         private readonly DnsProfile Google = new("Google", "8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844");
 
-        private Label lblIf = new Label { Left = 450, Top = 15, Width = 540, Text = "選擇要套用的網路介面 (乙太網路 / Wi‑Fi / 進階可選)：" };
-        private Label logTitle = new Label { Left = 450, Top = 15, Width = 540, Text = "輸出紀錄：" };
+        private Label lblIf = new Label { Left = rightPanelStartX, Top = 15, Width = 540, Text = "選擇要套用的網路介面 (乙太網路 / Wi‑Fi / 進階可選)：" };
+        private Label logTitle = new Label { Left = rightPanelStartX, Top = 15, Width = 540, Text = "輸出紀錄：" };
 
+        //Panel edges
+        private static int leftPanelEndX = 466;
+        private static int rightPanelStartX = 450;
+        private static int rightPanelEndX = 881;
+        private static int expandShiftX = (rightPanelEndX - leftPanelEndX)/2;
 
         public MainForm()
         {
@@ -346,14 +352,7 @@ namespace AutoDNS
 
 
             Text = "AutoDNS";
-            Width = 460; Height = 400; StartPosition = FormStartPosition.CenterScreen;
-
-            // 設定介面選擇區
-            clbIfaces = new CheckedListBox { Left = 450, Top = 40, Width = 500, Height = 255, CheckOnClick = true };    //Select network interfaces
-            chkSelectAll = new CheckBox { Left = 450, Top = 305, Width = 200, Text = "全選目前運作中的介面" };
-            chkIncludeAdvanced = new CheckBox { Left = 650, Top = 305, Width = 200, Text = "包含進階/虛擬/撥接介面" };
-            btnDoneSelect = new Button { Left = 850, Top = 305, Width = 100, Height = 30, Text = "完成選擇" };
-            btnDoneSelect.Click += (s, e) => doneSelect();
+            Width = leftPanelEndX; Height = 400; StartPosition = FormStartPosition.CenterScreen;
 
             // 設定 DNS 提供者選項
             chkAdGuard = new CheckBox { Left = 15, Top = 40, Width = 400, Text = "使用 AdGuard DNS (94.140.14.14 / 2a10:50c0::ad1:ff)" };
@@ -363,7 +362,7 @@ namespace AutoDNS
             chkDhcp = new CheckBox { Left = 15, Top = 70, Width = 300, Text = "自動取得 DNS (DHCP)" };
             chkDhcp.CheckedChanged += (s, e) => { if (chkDhcp.Checked) chkAdGuard.Checked = false; UpdateProviderEnable(); };
 
-            grpProvider = new GroupBox { Left = 15, Top = 105, Width = 415, Height = 150, Text = "未勾 AdGuard 與 DHCP 時，改用以下 DNS：" };
+            grpProvider = new GroupBox { Left = 15, Top = 105, Width = 420, Height = 150, Text = "未勾 AdGuard 與 DHCP 時，改用以下 DNS：" };
             rbHiNet = new RadioButton { Left = 20, Top = 25, Width = 350, Text = "HiNet (168.95.1.1 / 2001:b000:168::1)" };
             rbCloudflare = new RadioButton { Left = 20, Top = 55, Width = 350, Text = "Cloudflare (1.1.1.1 / 2606:4700:4700::1111)" };
             rbGoogle = new RadioButton { Left = 20, Top = 85, Width = 350, Text = "Google (8.8.8.8 / 2001:4860:4860::8888)" };
@@ -384,21 +383,28 @@ namespace AutoDNS
             btnToggleLogs.Click += (s, e) => ToggleLogs();
             btnFlush.Click += async (s, e) => await FlushDnsAsync();
 
+            // 設定介面選擇區
+            clbIfaces = new CheckedListBox { Left = rightPanelStartX, Top = 40, Width = 400, Height = 255, CheckOnClick = true };    //Select network interfaces
+            chkSelectAll = new CheckBox { Left = rightPanelStartX, Top = 310, Width = 150, Text = "全選目前運作中的介面" };
+            chkIncludeAdvanced = new CheckBox { Left = rightPanelStartX+150, Top = 310, Width = 160, Text = "包含進階/虛擬/撥接介面" };
+            btnDoneSelect = new Button { Left = rightPanelStartX + 310, Top = 305, Width = 90, Height = 30, Text = "完成選擇" };
+            btnDoneSelect.Click += (s, e) => doneSelect();
+
             // Bottom label
             var lblInfo = new Label
             {
                 Left = 15,
                 Top = 340,
-                Width = 940,
+                Width = 865,
                 Height = 30,
                 Text = "提示：需要系統管理員權限。若設定未生效可嘗試重新連線或清除 DNS 快取。"
             };
 
             //log output box
-            txtLog = new TextBox { Left = 450, Top = 40, Width = 500, Height = 255, Multiline = true, ReadOnly = true };
+            txtLog = new TextBox { Left = rightPanelStartX, Top = 40, Width = 400, Height = 255, Multiline = true, ReadOnly = true };
             txtLog.ScrollBars = ScrollBars.Vertical;
             txtLog.Font = new Font("Consolas", 10);
-            btnClearLogs = new Button { Left = 450, Top = 305, Width = 500, Height = 30, Text = "清除輸出紀錄" };
+            btnClearLogs = new Button { Left = rightPanelStartX, Top = 305, Width = 400, Height = 30, Text = "清除輸出紀錄" };
             btnClearLogs.Click += (s, e) => txtLog.Clear();
 
 
@@ -415,9 +421,9 @@ namespace AutoDNS
             UpdateProviderEnable();
         }
 
-        private void controlInterfaceUI(bool isUIVisible)
+        private void controlInterfaceUI(bool isInterfaceVisible)
         {
-            if (isUIVisible)
+            if (isInterfaceVisible)
             {
                 lblIf.Visible = true;
                 clbIfaces.Visible = true;
@@ -456,19 +462,19 @@ namespace AutoDNS
         {
             if (expand)
             {
-                if (Width != 980)
+                if (Width != rightPanelEndX)
                 {
-                    Left = this.Left - 260; //move left to center the expanded window
+                    Left = this.Left - expandShiftX; //move left to center the expanded window
                 }
-                Width = 980;
+                Width = rightPanelEndX;
             }
             else
             {
-                if (Width != 460)
+                if (Width != leftPanelEndX)
                 {
-                    Left = this.Left + 260; //move right to center the collapsed window
+                    Left = this.Left + expandShiftX; //move right to center the collapsed window
                 }
-                Width = 460;
+                Width = leftPanelEndX;
             }
 
         }
