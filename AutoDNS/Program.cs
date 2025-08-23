@@ -30,7 +30,7 @@ namespace AutoDNS
                 }
                 catch
                 {
-                    MessageBox.Show("需要系統管理員權限來修改 DNS 設定。\n請以系統管理員身分重新執行。", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    Program.ShowDarkInfo(null, "需要系統管理員權限來修改 DNS 設定。\n請以系統管理員身分重新執行", "AutoDNS");
                 }
                 return;
             }
@@ -38,6 +38,144 @@ namespace AutoDNS
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new MainForm());
+        }
+
+        public static DialogResult ShowDarkInfo(Control owner, string text, string title = "訊息")
+        {
+
+            // 跨執行緒安全呼叫
+            if (owner != null && owner.InvokeRequired)
+            {
+                DialogResult r = DialogResult.None;
+                owner.Invoke((Action)(() => r = ShowDarkInfo(owner, text, title)));
+                return r;
+            }
+
+            // 色票
+            Color DarkBg = Color.FromArgb(28, 28, 30);
+            Color PanelBg = Color.FromArgb(38, 38, 42);
+            Color TextFg = Color.White;
+            Color BtnBg = Color.FromArgb(56, 56, 64);
+            Color BtnHover = Color.FromArgb(72, 72, 80);
+            Color BtnDown = Color.FromArgb(88, 88, 96);
+
+            using (var f = new Form())
+            {
+                f.Text = title;
+                f.StartPosition = owner != null ? FormStartPosition.CenterParent : FormStartPosition.CenterScreen;
+                f.FormBorderStyle = FormBorderStyle.FixedDialog;
+                f.MaximizeBox = false; f.MinimizeBox = false;
+                f.AutoScaleMode = AutoScaleMode.Dpi;
+                f.BackColor = DarkBg; f.ForeColor = TextFg;
+
+                // 佈局常數
+                const int minClientW = 100;
+                const int minClientH = 100;
+                const int iconLeft = 18;
+                const int iconTop = 22;
+                const int iconSize = 32;
+                const int contentLeft = iconLeft + iconSize + 20; // 18+32+20
+                const int topPad = 20;
+                const int spacing = 20; // 內容與按鈕間距
+                const int rightPad = 18;
+                const int bottomPad = 18;
+
+                var wa = owner != null ? Screen.FromControl(owner).WorkingArea
+                                       : Screen.PrimaryScreen.WorkingArea;
+                int maxClientW = Math.Max(minClientW, wa.Width - 120);
+                int maxClientH = Math.Max(minClientH, wa.Height - 160);
+
+                f.ClientSize = new Size(minClientW, minClientH);
+
+                var iconBox = new PictureBox
+                {
+                    Image = SystemIcons.Information.ToBitmap(),
+                    SizeMode = PictureBoxSizeMode.CenterImage,
+                    BackColor = DarkBg,
+                    Left = iconLeft,
+                    Top = iconTop,
+                    Width = iconSize,
+                    Height = iconSize
+                };
+
+                // 內容 Panel：啟用水平捲軸，不換行
+                var content = new Panel
+                {
+                    Left = contentLeft,
+                    Top = topPad,
+                    Height = 30, // 先給單行高度，稍後 Reflow 會調
+                    BackColor = DarkBg,
+                    //AutoScroll = true
+                };
+
+                var lbl = new Label
+                {
+                    AutoSize = true,      // 單行，寬度跟著文字跑
+                    BackColor = DarkBg,
+                    ForeColor = TextFg,
+                    Left = 0,
+                    Top = 0,
+                    Text = text
+                };
+
+                var ok = new Button
+                {
+                    Text = "確定",
+                    Width = 96,
+                    Height = 30,
+                    DialogResult = DialogResult.OK,
+                    Anchor = AnchorStyles.Right | AnchorStyles.Bottom
+                };
+                ok.FlatStyle = FlatStyle.Flat; ok.UseVisualStyleBackColor = false;
+                ok.BackColor = BtnBg; ok.ForeColor = TextFg;
+                ok.FlatAppearance.BorderSize = 1;
+                ok.FlatAppearance.BorderColor = ControlPaint.Light(BtnBg);
+                ok.FlatAppearance.MouseOverBackColor = BtnHover;
+                ok.FlatAppearance.MouseDownBackColor = BtnDown;
+
+                content.Controls.Add(lbl);
+                f.Controls.Add(iconBox);
+                f.Controls.Add(content);
+                f.Controls.Add(ok);
+                f.AcceptButton = ok;
+
+                void Reflow()
+                {
+                    // 量測單行寬度（不包內距）
+                    int oneLineTextW = TextRenderer.MeasureText(
+                        lbl.Text, lbl.Font, new Size(int.MaxValue, int.MaxValue),
+                        TextFormatFlags.NoPadding).Width;
+
+                    // 期望的客戶區寬度（單行塞得下，或最多到螢幕上限）
+                    int desiredClientW = Math.Clamp(contentLeft + oneLineTextW + rightPad,
+                                                    minClientW, maxClientW);
+
+                    if (f.ClientSize.Width != desiredClientW)
+                        f.ClientSize = new Size(desiredClientW+10, f.ClientSize.Height);
+
+                    // Panel 寬度 = 客戶區寬度扣掉左右邊
+                    content.Width = Math.Max(120, f.ClientSize.Width - contentLeft - rightPad);
+                    content.Height = Math.Max(lbl.Height, 30); // 單行高度即可（不換行）
+                                                               // Label 單行：AutoSize=true，不設定 MaximumSize → 絕不換行
+                                                               // 若 lbl 寬 > content 寬，Panel 會自動出水平捲軸
+
+                    // 計算需要的高度
+                    int requiredH = content.Bottom + spacing + ok.Height + bottomPad;
+                    int desiredClientH = Math.Clamp(requiredH, minClientH, maxClientH);
+                    if (f.ClientSize.Height != desiredClientH)
+                        f.ClientSize = new Size(f.ClientSize.Width, desiredClientH);
+
+                    // 右下角定位 OK
+                    ok.Left = f.ClientSize.Width - ok.Width - rightPad;
+                    ok.Top = f.ClientSize.Height - ok.Height - bottomPad;
+                }
+
+                // 初始佈局
+                Reflow();
+
+                return owner != null ? f.ShowDialog(owner) : f.ShowDialog();
+            }
+
         }
 
         static bool IsAdministrator()
@@ -71,7 +209,7 @@ namespace AutoDNS
     {
         public string Name { get; set; } = "";       // 介面顯示名稱（Alias）
         public string Id { get; set; } = "";         // 介面 GUID
-        public int IfIndex { get; set; }              // 介面索引（用於 PowerShell/Set-DnsClientServerAddress）
+        public int IfIndex { get; set; }             // 介面索引（用於 PowerShell/Set-DnsClientServerAddress）
             = -1;
         public override string ToString() => IfIndex >= 0 ? $"{Name} (ifIndex={IfIndex})" : Name;
     }
@@ -85,7 +223,7 @@ namespace AutoDNS
         private CheckBox chkDhcp;
         private GroupBox grpProvider;
         private RadioButton rbHiNet, rbCloudflare, rbGoogle;
-        private Button btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, btnDoneSelect;
+        private Button btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, btnDoneSelect, btnClearLogs;
         private TextBox txtLog;
 
         // Logs toggle state (default OFF)
@@ -100,9 +238,113 @@ namespace AutoDNS
         private readonly DnsProfile Google = new("Google", "8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844");
 
         private Label lblIf = new Label { Left = 450, Top = 15, Width = 540, Text = "選擇要套用的網路介面 (乙太網路 / Wi‑Fi / 進階可選)：" };
+        private Label logTitle = new Label { Left = 450, Top = 15, Width = 540, Text = "輸出紀錄：" };
+
 
         public MainForm()
         {
+
+            //Dark mode colors
+
+            Color DarkBg = Color.FromArgb(28, 28, 30);
+            Color PanelBg = Color.FromArgb(38, 38, 42);
+            Color TextFg = Color.White;
+            Color TextBg = Color.DimGray;
+
+            Color BtnBg = Color.FromArgb(56, 56, 64);
+            Color BtnHover = Color.FromArgb(72, 72, 80);
+            Color BtnDown = Color.FromArgb(88, 88, 96);
+
+
+            Color AccentBg = Color.FromArgb(0, 120, 215);
+            Color AccentHover = Color.FromArgb(0, 99, 177);
+            Color AccentDown = Color.FromArgb(0, 78, 139);
+
+            void StyleButton(Button b, Color bg, Color fg, Color hover, Color down, Color? border = null)
+            {
+                b.FlatStyle = FlatStyle.Flat;
+                b.UseVisualStyleBackColor = false;
+                b.BackColor = bg;
+                b.ForeColor = fg;
+                b.FlatAppearance.BorderSize = 1;
+                b.FlatAppearance.BorderColor = border ?? ControlPaint.Light(bg);
+                b.FlatAppearance.MouseOverBackColor = hover;
+                b.FlatAppearance.MouseDownBackColor = down;
+                b.TabStop = false;
+            }
+
+            //dns provider dark mode
+            void UpdateProviderEnable()
+            {
+                bool locked = chkAdGuard.Checked || chkDhcp.Checked;
+
+                // 保持 GroupBox 啟用，避免變回系統字色
+                grpProvider.Enabled = true;
+                grpProvider.ForeColor = locked ? TextBg : TextFg;
+                grpProvider.BackColor = DarkBg;
+
+                foreach (var rb in new[] { rbHiNet, rbCloudflare, rbGoogle })
+                {
+                    rb.AutoCheck = !locked;        // 鎖住選擇確保深色主題字色
+                    rb.Cursor = locked ? Cursors.No : Cursors.Default;
+                    rb.ForeColor = locked ? TextBg : TextFg;
+                    rb.BackColor = DarkBg;
+                }
+            }
+
+
+
+            void ApplyDarkMode()
+            {
+                // 視窗本體
+                BackColor = DarkBg;
+                ForeColor = TextFg;
+
+                // 文字/輸入類
+                if (txtLog != null)
+                {
+                    txtLog.BackColor = PanelBg;
+                    txtLog.ForeColor = TextFg;
+                    txtLog.BorderStyle = BorderStyle.FixedSingle;
+                }
+                if (clbIfaces != null)
+                {
+                    clbIfaces.BackColor = PanelBg;
+                    clbIfaces.ForeColor = TextFg;
+                    clbIfaces.BorderStyle = BorderStyle.FixedSingle;
+                }
+
+
+                // 勾選框：AdGuard / DHCP / 全選 / 包含進階
+                foreach (var c in new Control[] { chkAdGuard, chkDhcp, chkSelectAll, chkIncludeAdvanced })
+                {
+                    if (c != null)
+                    {
+                        c.ForeColor = TextFg;
+                        c.BackColor = DarkBg;
+                        if (c is CheckBox cb) cb.UseVisualStyleBackColor = false;
+                    }
+                }
+
+                // 一般 Label
+                foreach (Control c in Controls)
+                {
+                    if (c is Label) c.ForeColor = TextFg;
+                }
+
+                // 按鈕：一般按鈕走暗色，主要動作按鈕走 Accent
+                if (btnApply != null) StyleButton(btnApply, AccentBg, Color.White, AccentHover, AccentDown);
+                if (btnFlush != null) StyleButton(btnFlush, AccentBg, Color.White, AccentHover, AccentDown);
+                if (btnDoneSelect != null) StyleButton(btnDoneSelect, AccentBg, Color.White, AccentHover, AccentDown);
+
+                foreach (var b in new[] { btnRefresh, btnShow, btnToggleLogs })
+                {
+                    if (b != null) StyleButton(b, BtnBg, TextFg, BtnHover, BtnDown);
+                }
+
+            }
+
+
             Text = "AutoDNS";
             Width = 460; Height = 400; StartPosition = FormStartPosition.CenterScreen;
 
@@ -114,7 +356,7 @@ namespace AutoDNS
             btnDoneSelect.Click += (s, e) => doneSelect();
 
             // 設定 DNS 提供者選項
-            chkAdGuard = new CheckBox { Left = 15, Top = 40, Width = 400, Text = "使用 AdGuard DNS (94.140.14.14)" };
+            chkAdGuard = new CheckBox { Left = 15, Top = 40, Width = 400, Text = "使用 AdGuard DNS (94.140.14.14 / 2a10:50c0::ad1:ff)" };
             chkAdGuard.Checked = true;
             chkAdGuard.CheckedChanged += (s, e) => { if (chkAdGuard.Checked) chkDhcp.Checked = false; UpdateProviderEnable(); };
 
@@ -122,9 +364,9 @@ namespace AutoDNS
             chkDhcp.CheckedChanged += (s, e) => { if (chkDhcp.Checked) chkAdGuard.Checked = false; UpdateProviderEnable(); };
 
             grpProvider = new GroupBox { Left = 15, Top = 105, Width = 415, Height = 150, Text = "未勾 AdGuard 與 DHCP 時，改用以下 DNS：" };
-            rbHiNet = new RadioButton { Left = 20, Top = 25, Width = 200, Text = "HiNet(168.95.1.1)" };
-            rbCloudflare = new RadioButton { Left = 20, Top = 55, Width = 200, Text = "Cloudflare (1.1.1.1)" };
-            rbGoogle = new RadioButton { Left = 20, Top = 85, Width = 200, Text = "Google (8.8.8.8)" };
+            rbHiNet = new RadioButton { Left = 20, Top = 25, Width = 350, Text = "HiNet (168.95.1.1 / 2001:b000:168::1)" };
+            rbCloudflare = new RadioButton { Left = 20, Top = 55, Width = 350, Text = "Cloudflare (1.1.1.1 / 2606:4700:4700::1111)" };
+            rbGoogle = new RadioButton { Left = 20, Top = 85, Width = 350, Text = "Google (8.8.8.8 / 2001:4860:4860::8888)" };
             rbCloudflare.Checked = true;
             grpProvider.Controls.AddRange(new Control[] { rbHiNet, rbCloudflare, rbGoogle });
 
@@ -151,20 +393,26 @@ namespace AutoDNS
                 Height = 30,
                 Text = "提示：需要系統管理員權限。若設定未生效可嘗試重新連線或清除 DNS 快取。"
             };
-            txtLog = new TextBox { Left = 450, Top = 40, Width = 500, Height = 260, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
-            txtLog.Visible = false; // 預設：關閉紀錄（不顯示）
 
-            Controls.AddRange(new Control[] { lblIf, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, txtLog, btnDoneSelect });
+            //log output box
+            txtLog = new TextBox { Left = 450, Top = 15, Width = 500, Height = 280, Multiline = true, ReadOnly = true };
+            txtLog.Visible = false;    // 預設：關閉紀錄（不顯示）
+
+            Controls.AddRange(new Control[] { lblIf, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, txtLog, btnDoneSelect, btnClearLogs });
+
+
+            ApplyDarkMode();
 
             Load += (_, __) => InitInterfaces();
             chkSelectAll.CheckedChanged += (s, e) => SelectAllUpInterfaces(chkSelectAll.Checked);
             chkIncludeAdvanced.CheckedChanged += (s, e) => InitInterfaces();
+            controlInterfaceUI(false);
             UpdateProviderEnable();
         }
 
-        private void controlInterfaceUI(bool isVisibleUI)
+        private void controlInterfaceUI(bool isUIVisible)
         {
-            if (isVisibleUI)
+            if (isUIVisible)
             {
                 lblIf.Visible = true;
                 clbIfaces.Visible = true;
@@ -179,6 +427,22 @@ namespace AutoDNS
                 chkSelectAll.Visible = false;
                 chkIncludeAdvanced.Visible = false;
                 btnDoneSelect.Visible = false;
+            }
+        }
+
+        private void controlLogUI(bool isLogVisible)
+        {
+            if (isLogVisible)
+            {
+                logTitle.Visible = true;
+                txtLog.Visible = true;
+                btnClearLogs.Visible = true;
+            }
+            else
+            {
+                logTitle.Visible = false;
+                txtLog.Visible = false;
+                btnClearLogs.Visible = false;
             }
         }
 
@@ -206,6 +470,12 @@ namespace AutoDNS
 
         private void doneSelect()
         {
+            var selected = clbIfaces.CheckedItems.Cast<InterfaceItem>().ToList();
+            if (selected.Count == 0)
+            {
+                Program.ShowDarkInfo(this, "請至少選擇一個介面。", "AutoDNS");
+                return;
+            }
             isInInterface = false;
             controlInterfaceUI(false);
             if (logsEnabled)
@@ -222,7 +492,7 @@ namespace AutoDNS
         private void ToggleLogs()
         {
             logsEnabled = !logsEnabled;
-            txtLog.Visible = logsEnabled;
+            controlLogUI(logsEnabled);
             if (logsEnabled)
             {
                 expandWindow(true);
@@ -240,10 +510,11 @@ namespace AutoDNS
             btnToggleLogs.Text = logsEnabled ? "顯示紀錄：開" : "顯示紀錄：關";
         }
 
-        private void UpdateProviderEnable()
-        {
-            grpProvider.Enabled = !chkAdGuard.Checked && !chkDhcp.Checked;
-        }
+        //dns provider light mode
+        //private void UpdateProviderEnable()
+        //{
+        //    grpProvider.Enabled = !chkAdGuard.Checked && !chkDhcp.Checked;
+        //}
 
         private bool IsSupportedType(NetworkInterfaceType t)
         {
@@ -275,7 +546,7 @@ namespace AutoDNS
                 clbIfaces.Items.Add(item, shouldCheck);
             }
 
-            // 若是由 btnRefresh 觸發，顯示提示訊息
+            // 若是由 btnRefresh 觸發
             if (ActiveControl == btnRefresh)
             {
                 expandWindow(true);
@@ -284,9 +555,9 @@ namespace AutoDNS
                 btnToggleLogs.Text = logsEnabled ? "顯示紀錄：開" : "顯示紀錄：關";
                 controlInterfaceUI(true);
                 isInInterface = true;
-                MessageBox.Show($"已掃描 {clbIfaces.Items.Count} 個介面。\n" +
+                Program.ShowDarkInfo(this, "已掃描 " + clbIfaces.Items.Count + " 個介面。\n" +
                     "請選擇要套用的介面，並點擊「套用設定」。\n" +
-                    "若需要包含進階/虛擬介面，請勾選「包含進階/虛擬/撥接介面」。", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    "若需要包含進階/虛擬介面，請勾選「包含進階/虛擬/撥接介面」。", "AutoDNS");
             }
         }
 
@@ -308,7 +579,7 @@ namespace AutoDNS
             var selected = clbIfaces.CheckedItems.Cast<InterfaceItem>().ToList();
             if (selected.Count == 0)
             {
-                MessageBox.Show("請至少選擇一個介面。", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Program.ShowDarkInfo(this, "請至少選擇一個介面。", "AutoDNS");
                 return;
             }
 
@@ -358,14 +629,14 @@ namespace AutoDNS
 
             Log("\r\n完成。若應用程式/瀏覽器仍未生效，請嘗試重新連線或清除 DNS 快取：ipconfig /flushdns");
             
-            MessageBox.Show($"已套用：{profile.Name} DNS", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Program.ShowDarkInfo(this, $"已套用：{profile.Name} DNS\n", "AutoDNS");
         }
 
         private async Task SetDhcpAsync(List<InterfaceItem> selected)
         {
             if (selected.Count == 0)
             {
-                MessageBox.Show("請至少選擇一個介面。", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Program.ShowDarkInfo(this, "請至少選擇一個介面。", "AutoDNS");
                 return;
             }
 
@@ -393,7 +664,7 @@ namespace AutoDNS
             }
             Log("\r\n完成。若應用程式/瀏覽器仍未生效，請嘗試重新連線或清除 DNS 快取：ipconfig /flushdns");
 
-            MessageBox.Show("已切換為自動取得 (DHCP)", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            Program.ShowDarkInfo(this, "已切換為自動取得 (DHCP)\n", "AutoDNS");
         }
 
         private async Task ShowDnsAsync()
@@ -401,7 +672,7 @@ namespace AutoDNS
             var selected = clbIfaces.CheckedItems.Cast<InterfaceItem>().ToList();
             if (selected.Count == 0)
             {
-                MessageBox.Show("請至少選擇一個介面。", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                Program.ShowDarkInfo(this, "請至少選擇一個介面。", "AutoDNS");
                 return;
             }
             Log("\n=== 目前 DNS 設定 ===");
@@ -432,15 +703,16 @@ namespace AutoDNS
                     var v4 = props.DnsAddresses.Where(ip => ip.AddressFamily == AddressFamily.InterNetwork).Select(ip => ip.ToString()).ToList();
                     var v6 = props.DnsAddresses.Where(ip => ip.AddressFamily == AddressFamily.InterNetworkV6).Select(ip => ip.ToString()).ToList();
                     summarySb.AppendLine($"介面：{nic.Name} (ifIndex={nic.IfIndex})");
-                    summarySb.AppendLine("IPv4: " + (v4.Count > 0 ? string.Join(", ", v4) : "(無)"));
-                    summarySb.AppendLine("IPv6: " + (v6.Count > 0 ? string.Join(", ", v6) : "(無)"));
+                    summarySb.AppendLine("IPv4: " + (v4.Count > 0 ? string.Join(" / ", v4) : "(無)"));
+                    summarySb.AppendLine("IPv6: " + (v6.Count > 0 ? string.Join(" / ", v6) : "(無)"));
                     summarySb.AppendLine();
                 }
                 
                 var text = summarySb.ToString().Trim();
                 if (string.IsNullOrWhiteSpace(text))
-                MessageBox.Show("無法取得目前 DNS 設定，請開啟紀錄檢視詳細輸出。", "AutoDNS", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                else MessageBox.Show(text, "目前 DNS 設定", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    Program.ShowDarkInfo(this, "無法取得目前 DNS 設定，請開啟紀錄檢視詳細輸出。", "AutoDNS");
+                
+                else Program.ShowDarkInfo(this, text, "目前 DNS 設定");
 
             }
             catch { }
@@ -461,7 +733,7 @@ namespace AutoDNS
                 StandardErrorEncoding = Encoding.UTF8
             }, prefix: "ipconfig /flushdns");
 
-            MessageBox.Show(ec == 0 ? "DNS 快取已清除" : "DNS 快取清除可能失敗，請查看紀錄。", "AutoDNS", MessageBoxButtons.OK, ec == 0 ? MessageBoxIcon.Information : MessageBoxIcon.Warning);
+            Program.ShowDarkInfo(this, ec == 0 ? "DNS 快取已清除" : "DNS 快取清除可能失敗，請查看紀錄。", "AutoDNS");
         }
 
         private async Task<int> RunNetshAsync(string args)
