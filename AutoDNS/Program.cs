@@ -233,10 +233,12 @@ namespace AutoDNS
         private bool isInInterface = false;
 
         // Profiles
-        private readonly DnsProfile AdGuard = new("AdGuard", "94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff");
-        private readonly DnsProfile HiNet = new("HiNet", "168.95.1.1", "168.95.192.1", "2001:b000:168::1", "2001:b000:168::2");
-        private readonly DnsProfile Cloudflare = new("Cloudflare", "1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001");
-        private readonly DnsProfile Google = new("Google", "8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844");
+        public readonly DnsProfile AdGuard = new("AdGuard", "94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff");
+        public readonly DnsProfile HiNet = new("HiNet", "168.95.1.1", "168.95.192.1", "2001:b000:168::1", "2001:b000:168::2");
+        public readonly DnsProfile Cloudflare = new("Cloudflare", "1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001");
+        public readonly DnsProfile Google = new("Google", "8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844");
+
+        private ProgramDnsMonitor? monitor;
 
         private Label lblIf = new Label { Left = rightPanelStartX, Top = 15, Width = 540, Text = "選擇要套用的網路介面 (乙太網路 / Wi‑Fi / 進階可選)：" };
         private Label logTitle = new Label { Left = rightPanelStartX, Top = 15, Width = 540, Text = "輸出紀錄：" };
@@ -419,6 +421,9 @@ namespace AutoDNS
             controlInterfaceUI(false);
             controlLogUI(false);
             UpdateProviderEnable();
+
+            monitor = new ProgramDnsMonitor(this);
+            FormClosed += (_, __) => monitor?.Dispose();
         }
 
         private void controlInterfaceUI(bool isInterfaceVisible)
@@ -576,6 +581,12 @@ namespace AutoDNS
             for (int i = 0; i < clbIfaces.Items.Count; i++) clbIfaces.SetItemChecked(i, check);
         }
 
+        public DnsProfile? ProfileByName(string name)
+        {
+            return new[] { AdGuard, HiNet, Cloudflare, Google }
+                .FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        }
+
         private DnsProfile CurrentProfile()
         {
             if (chkAdGuard.Checked) return AdGuard;
@@ -600,6 +611,18 @@ namespace AutoDNS
             }
 
             var profile = CurrentProfile();
+            await SetDnsAsync(profile, selected, false);
+        }
+
+        public async Task ApplyProfileAsync(DnsProfile profile, bool silent = false)
+        {
+            var selected = clbIfaces.CheckedItems.Cast<InterfaceItem>().ToList();
+            if (selected.Count == 0) return;
+            await SetDnsAsync(profile, selected, silent);
+        }
+
+        private async Task SetDnsAsync(DnsProfile profile, List<InterfaceItem> selected, bool silent)
+        {
             Log($"\r\n=== 套用 DNS 設定：{profile.Name} ===");
             Log($"IPv4: {profile.IPv4Primary}, {profile.IPv4Secondary}");
             Log($"IPv6: {profile.IPv6Primary}, {profile.IPv6Secondary}");
@@ -638,8 +661,9 @@ namespace AutoDNS
             }
 
             Log("\r\n完成。若應用程式/瀏覽器仍未生效，請嘗試重新連線或清除 DNS 快取：ipconfig /flushdns");
-            
-            Program.ShowDarkInfo(this, $"已套用：{profile.Name} DNS\n", "AutoDNS");
+
+            if (!silent)
+                Program.ShowDarkInfo(this, $"已套用：{profile.Name} DNS\n", "AutoDNS");
         }
 
         private async Task SetDhcpAsync(List<InterfaceItem> selected)
