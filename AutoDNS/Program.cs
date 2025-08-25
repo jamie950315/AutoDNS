@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing.Text;
 using System.Linq;
@@ -224,7 +225,7 @@ namespace AutoDNS
         private CheckBox chkDhcp;
         private GroupBox grpProvider;
         private RadioButton rbHiNet, rbCloudflare, rbGoogle;
-        private Button btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, btnDoneSelect, btnClearLogs;
+        private Button btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, btnDoneSelect, btnClearLogs, btnExeRunning;
         private TextBox txtLog;
 
         // Logs toggle state (default OFF)
@@ -343,7 +344,7 @@ namespace AutoDNS
                 if (btnClearLogs != null) StyleButton(btnClearLogs, AccentBg, Color.White, AccentHover, AccentDown);
                 if (btnDoneSelect != null) StyleButton(btnDoneSelect, AccentBg, Color.White, AccentHover, AccentDown);
 
-                foreach (var b in new[] { btnRefresh, btnShow, btnToggleLogs, btnFlush })
+                foreach (var b in new[] { btnRefresh, btnShow, btnToggleLogs, btnFlush, btnExeRunning })
                 {
                     if (b != null) StyleButton(b, BtnBg, TextFg, BtnHover, BtnDown);
                 }
@@ -408,7 +409,19 @@ namespace AutoDNS
             btnClearLogs.Click += (s, e) => txtLog.Clear();
 
 
-            Controls.AddRange(new Control[] { lblIf, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, txtLog, btnDoneSelect, btnClearLogs, logTitle });
+            //is exe running
+            btnExeRunning = new Button { Left = 15, Top = 340, Width = 420, Height = 30, Text = "isExeRunning?" };
+            btnExeRunning.Click += (s, e) =>
+            {
+                //string exePath = @"C:\Windows\notepad.exe";
+                string exePath = @"C:\WINDOWS\system32\Taskmgr.exe";
+                bool isRunning = ProgramIsRunning(exePath);
+                string message = isRunning ? "AutoDNS 已在執行中。" : "AutoDNS 未在執行中。";
+                Program.ShowDarkInfo(this, message, "AutoDNS 狀態");
+            };
+
+
+            Controls.AddRange(new Control[] { lblIf, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, txtLog, btnDoneSelect, btnClearLogs, logTitle, btnExeRunning });
 
 
             ApplyDarkMode();
@@ -526,6 +539,40 @@ namespace AutoDNS
         //{
         //    grpProvider.Enabled = !chkAdGuard.Checked && !chkDhcp.Checked;
         //}
+
+        private static bool ProgramIsRunning(string fullPath)
+        {
+            // 標準化並去掉尾端斜線
+            string target = Path.GetFullPath(fullPath)
+                              .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            string exeName = Path.GetFileNameWithoutExtension(target);
+
+            foreach (var p in Process.GetProcessesByName(exeName))
+            {
+                try
+                {
+                    string procPath = Path.GetFullPath(p.MainModule!.FileName)
+                                           .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                    if (string.Equals(procPath, target, StringComparison.OrdinalIgnoreCase))
+                        return true; // 同檔名、同完整路徑 → 命中
+                }
+                catch (Win32Exception)
+                {
+                    // 權限不足或跨位元數，略過即可
+                }
+                catch (InvalidOperationException)
+                {
+                    // 行程可能在讀取前就結束了，略過
+                }
+                finally
+                {
+                    p.Dispose(); // 釋放資源
+                }
+            }
+            return false;
+        }
 
         private bool IsSupportedType(NetworkInterfaceType t)
         {
