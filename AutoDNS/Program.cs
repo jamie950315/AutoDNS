@@ -411,14 +411,7 @@ namespace AutoDNS
 
             //is exe running
             btnExeRunning = new Button { Left = 15, Top = 340, Width = 420, Height = 30, Text = "isExeRunning?" };
-            btnExeRunning.Click += (s, e) =>
-            {
-                //string exePath = @"C:\Windows\notepad.exe";
-                string exePath = @"C:\WINDOWS\system32\Taskmgr.exe";
-                bool isRunning = ProgramIsRunning(exePath);
-                string message = isRunning ? "AutoDNS 已在執行中。" : "AutoDNS 未在執行中。";
-                Program.ShowDarkInfo(this, message, "AutoDNS 狀態");
-            };
+            btnExeRunning.Click += (s, e) => autoDnsSwitch();
 
 
             Controls.AddRange(new Control[] { lblIf, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, txtLog, btnDoneSelect, btnClearLogs, logTitle, btnExeRunning });
@@ -572,6 +565,32 @@ namespace AutoDNS
                 }
             }
             return false;
+        }
+
+        private void clearSelectedDns()
+        {
+            rbHiNet.Checked = false;
+            rbCloudflare.Checked = false;
+            rbGoogle.Checked = false;
+            chkAdGuard.Checked = false;
+            chkDhcp.Checked = false;
+        }
+
+        private async Task autoDnsSwitch()
+        {
+            //string exePath = @"C:\Windows\notepad.exe";
+            string exePath = @"C:\WINDOWS\system32\Taskmgr.exe";
+            bool isRunning = ProgramIsRunning(exePath);
+            //string message = isRunning ? "AutoDNS 已在執行中。" : "AutoDNS 未在執行中。";
+            //Program.ShowDarkInfo(this, message, "AutoDNS 狀態");
+            if (isRunning)
+            {
+                clearSelectedDns();
+                rbGoogle.Checked = true;
+                await ApplyAsync();
+            }
+
+
         }
 
         private bool IsSupportedType(NetworkInterfaceType t)
