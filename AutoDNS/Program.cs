@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.VisualBasic.Logging;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -6,10 +7,13 @@ using System.Drawing.Text;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace AutoDNS
 {
@@ -75,8 +79,8 @@ namespace AutoDNS
                 const int minClientH = 100;
                 const int iconLeft = 18;
                 const int iconTop = 22;
-                const int iconSize = 32;
-                const int contentLeft = iconLeft + iconSize + 20; // 18+32+20
+                const int iconSize = 40;
+                const int contentLeft = iconLeft + iconSize + 20; // 18+40+20
                 const int topPad = 20;
                 const int spacing = 20; // 內容與按鈕間距
                 const int rightPad = 18;
@@ -238,6 +242,7 @@ namespace AutoDNS
         private readonly DnsProfile HiNet = new("HiNet", "168.95.1.1", "168.95.192.1", "2001:b000:168::1", "2001:b000:168::2");
         private readonly DnsProfile Cloudflare = new("Cloudflare", "1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001");
         private readonly DnsProfile Google = new("Google", "8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844");
+        private readonly DnsProfile DhcpPlaceHolder = new("DHCP", "", "", "", "");
 
         private Label lblIf = new Label { Left = rightPanelStartX, Top = 15, Width = 540, Text = "選擇要套用的網路介面 (乙太網路 / Wi‑Fi / 進階可選)：" };
         private Label logTitle = new Label { Left = rightPanelStartX, Top = 15, Width = 540, Text = "輸出紀錄：" };
@@ -247,6 +252,9 @@ namespace AutoDNS
         private static int rightPanelStartX = 450;
         private static int rightPanelEndX = 881;
         private static int expandShiftX = (rightPanelEndX - leftPanelEndX)/2;
+
+        private static Dictionary<string, string> exePathListKVP = new Dictionary<string, string>();
+        private static string prevDnsProvider = "";
 
         public MainForm()
         {
@@ -400,6 +408,8 @@ namespace AutoDNS
                 Height = 30,
                 Text = "提示：需要系統管理員權限。若設定未生效可嘗試重新連線或清除 DNS 快取。"
             };
+            lblInfo.Visible = false;
+
 
             //log output box
             txtLog = new TextBox { Left = rightPanelStartX, Top = 40, Width = 400, Height = 255, Multiline = true, ReadOnly = true };
@@ -414,17 +424,23 @@ namespace AutoDNS
             btnExeRunning.Click += (s, e) => autoDnsSwitch();
 
 
-            Controls.AddRange(new Control[] { lblIf, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, txtLog, btnDoneSelect, btnClearLogs, logTitle, btnExeRunning });
+            Controls.AddRange(new Control[] { lblIf, lblInfo, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, txtLog, btnDoneSelect, btnClearLogs, logTitle, btnExeRunning });
 
 
             ApplyDarkMode();
 
-            Load += (_, __) => InitInterfaces();
+            Load += (_, __) =>
+            {
+                InitInterfaces();
+                ApplyAsync();
+            };
             chkSelectAll.CheckedChanged += (s, e) => SelectAllUpInterfaces(chkSelectAll.Checked);
             chkIncludeAdvanced.CheckedChanged += (s, e) => InitInterfaces();
             controlInterfaceUI(false);
             controlLogUI(false);
             UpdateProviderEnable();
+            
+            exePathListKVP = ProviderLookup.OutputKeyValuePair();
         }
 
         private void controlInterfaceUI(bool isInterfaceVisible)
@@ -579,19 +595,207 @@ namespace AutoDNS
         private async Task autoDnsSwitch()
         {
             //string exePath = @"C:\Windows\notepad.exe";
-            string exePath = @"C:\WINDOWS\system32\Taskmgr.exe";
+            string exePath = @"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
             bool isRunning = ProgramIsRunning(exePath);
             //string message = isRunning ? "AutoDNS 已在執行中。" : "AutoDNS 未在執行中。";
             //Program.ShowDarkInfo(this, message, "AutoDNS 狀態");
-            if (isRunning)
+
+
+            //Log(isRunning ? "Yes" : "No");
+            //if (isRunning)
+            //{
+            //    clearSelectedDns();
+            //    rbGoogle.Checked = true;
+            //    await ApplyAsync();
+
+            //}
+
+            //foreach (var kvp in exePathListKVP)
+            //{
+            //    Log($"Key: {kvp.Key}, Value: {kvp.Value}");
+            //}
+            bool matchAnyExe = false;
+            var matchedExe = new KeyValuePair<string, string>();
+            foreach (var kvp in exePathListKVP)
             {
-                clearSelectedDns();
-                rbGoogle.Checked = true;
-                await ApplyAsync();
+                if (ProgramIsRunning(kvp.Key))
+                {
+                    matchAnyExe = true;
+                    matchedExe = kvp;
+                    break;
+                }
+            }
+            if (matchAnyExe)
+            {
+                Log($"Key: {matchedExe.Key}, Value: {matchedExe.Value}");
+
+                if (prevDnsProvider != matchedExe.Value)
+                {
+                    clearSelectedDns();
+                    switch (matchedExe.Value)
+                    {
+                        case "AdGuard":
+                            chkAdGuard.Checked = true;
+                            break;
+                        case "Dhcp":
+                            chkDhcp.Checked = true;
+                            break;
+                        case "HiNet":
+                            rbHiNet.Checked = true;
+                            break;
+                        case "Cloudflare":
+                            rbCloudflare.Checked = true;
+                            break;
+                        case "Google":
+                            rbGoogle.Checked = true;
+                            break;
+                        default:
+                            chkAdGuard.Checked = true; //fallback to adguard
+                            break;
+                    }
+                    await ApplyAsync();
+                    Log($"Switched to {matchedExe.Value} DNS provider.");
+                }
+                else
+                {
+                    Log("Same DNS provider as before, no need to re-apply.");
+                }
+            }
+            else
+            {
+                Log("No matched exe running, revert to AdGuard DNS");
+                if (prevDnsProvider != "AdGuard")
+                {
+                    clearSelectedDns();
+                    chkAdGuard.Checked = true;
+                    await ApplyAsync();
+                    Log("Switched to AdGuard DNS provider.");
+                }
+                else
+                {
+                    Log("Same DNS provider as before, no need to re-apply.");
+                }
+
+            }
+        }
+
+
+        //current question: should remember the manual selected dns before auto switch?
+
+
+
+
+        public static class ProviderLookup
+        {
+            public static Dictionary<string, string> OutputKeyValuePair(string jsonFileName = "exePath.json")
+            {
+
+                // 找同目錄的 json
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory; // 兼容 WinForms/.NET Framework
+                string jsonPath = Path.Combine(baseDir, jsonFileName);
+                var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+
+                try
+                {
+                    using var fs = File.OpenRead(jsonPath);
+                    using var doc = JsonDocument.Parse(fs);
+
+                    // expect：{ "C:\\exampleDir\\example.exe": "Cloudflare", ... }
+                    // 讀取時也把 JSON 裡的 Key 做路徑標準化，並用不分大小寫比較
+                    foreach (var prop in doc.RootElement.EnumerateObject())
+                    {
+                        string k = NormalizePath(prop.Name);
+                        string? v = prop.Value.GetString();
+
+                        if (!string.IsNullOrWhiteSpace(k) && !string.IsNullOrWhiteSpace(v))
+                            map[k] = v!;
+
+                    }
+                }
+                catch
+                {
+                    // JSON 壞掉或其他例外一律走預設
+                }
+                return map;
             }
 
-
+            private static string NormalizePath(string path)
+            {
+                try
+                {
+                    // 轉成完整路徑 & 去掉尾端斜線，Windows 用 OrdinalIgnoreCase 比較
+                    return Path.GetFullPath(path)
+                               .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                }
+                catch
+                {
+                    // 無效路徑就原樣修剪
+                    return path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                }
+            }
         }
+
+
+
+
+        //public static class ProviderLookup
+        //{
+        //    public static string GetProviderForExe(string exeFullPath, string jsonFileName = "exePath.json")
+        //    {
+        //        const string FALLBACK = "AdGuard";
+        //        if (string.IsNullOrWhiteSpace(exeFullPath)) return FALLBACK;
+
+        //        // 標準化查詢 Key
+        //        string key = NormalizePath(exeFullPath);
+
+        //        // 找同目錄的 json
+        //        string baseDir = AppDomain.CurrentDomain.BaseDirectory; // 兼容 WinForms/.NET Framework
+        //        string jsonPath = Path.Combine(baseDir, jsonFileName);
+        //        if (!File.Exists(jsonPath)) return FALLBACK;
+
+        //        try
+        //        {
+        //            using var fs = File.OpenRead(jsonPath);
+        //            using var doc = JsonDocument.Parse(fs);
+
+        //            // expect：{ "C:\\exampleDir\\example.exe": "Cloudflare", ... }
+        //            // 讀取時也把 JSON 裡的 Key 做路徑標準化，並用不分大小寫比較
+        //            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        //            foreach (var prop in doc.RootElement.EnumerateObject())
+        //            {
+        //                string k = NormalizePath(prop.Name);
+        //                string? v = prop.Value.GetString();
+        //                if (!string.IsNullOrWhiteSpace(k) && !string.IsNullOrWhiteSpace(v))
+        //                    map[k] = v!;
+        //            }
+
+        //            return map.TryGetValue(key, out var provider) ? provider : FALLBACK;
+        //        }
+        //        catch
+        //        {
+        //            // JSON 壞掉或其他例外一律走預設
+        //            return FALLBACK;
+        //        }
+        //    }
+
+        //    private static string NormalizePath(string path)
+        //    {
+        //        try
+        //        {
+        //            // 轉成完整路徑 & 去掉尾端斜線，Windows 用 OrdinalIgnoreCase 比較
+        //            return Path.GetFullPath(path)
+        //                       .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        //        }
+        //        catch
+        //        {
+        //            // 無效路徑就原樣修剪
+        //            return path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        //        }
+        //    }
+        //}
+
+
 
         private bool IsSupportedType(NetworkInterfaceType t)
         {
@@ -647,7 +851,9 @@ namespace AutoDNS
             if (chkAdGuard.Checked) return AdGuard;
             if (rbHiNet.Checked) return HiNet;
             if (rbGoogle.Checked) return Google;
-            return Cloudflare;
+            if (rbCloudflare.Checked) return Cloudflare;
+            if (chkDhcp.Checked) return DhcpPlaceHolder;
+            return AdGuard;
         }
 
         private async Task ApplyAsync()
@@ -659,13 +865,15 @@ namespace AutoDNS
                 return;
             }
 
+            var profile = CurrentProfile();
+
             if (chkDhcp.Checked)
             {
+                prevDnsProvider = profile.Name;
                 await SetDhcpAsync(selected);
                 return;
             }
 
-            var profile = CurrentProfile();
             Log($"\r\n=== 套用 DNS 設定：{profile.Name} ===");
             Log($"IPv4: {profile.IPv4Primary}, {profile.IPv4Secondary}");
             Log($"IPv6: {profile.IPv6Primary}, {profile.IPv6Secondary}");
@@ -704,8 +912,14 @@ namespace AutoDNS
             }
 
             Log("\r\n完成。若應用程式/瀏覽器仍未生效，請嘗試重新連線或清除 DNS 快取：ipconfig /flushdns");
-            
-            Program.ShowDarkInfo(this, $"已套用：{profile.Name} DNS\n", "AutoDNS");
+
+            if (prevDnsProvider != "")
+            {
+                Program.ShowDarkInfo(this, $"已套用：{profile.Name} DNS\n", "AutoDNS");
+            }
+
+            prevDnsProvider = profile.Name;
+
         }
 
         private async Task SetDhcpAsync(List<InterfaceItem> selected)
