@@ -7,6 +7,7 @@ using System.Drawing.Text;
 using System.Linq;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
@@ -242,7 +243,7 @@ namespace AutoDNS
         private readonly DnsProfile HiNet = new("HiNet", "168.95.1.1", "168.95.192.1", "2001:b000:168::1", "2001:b000:168::2");
         private readonly DnsProfile Cloudflare = new("Cloudflare", "1.1.1.1", "1.0.0.1", "2606:4700:4700::1111", "2606:4700:4700::1001");
         private readonly DnsProfile Google = new("Google", "8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844");
-        private readonly DnsProfile DhcpPlaceHolder = new("DHCP", "", "", "", "");
+        private readonly DnsProfile DhcpPlaceHolder = new("Dhcp", "", "", "", "");
 
         private Label lblIf = new Label { Left = rightPanelStartX, Top = 15, Width = 540, Text = "選擇要套用的網路介面 (乙太網路 / Wi‑Fi / 進階可選)：" };
         private Label logTitle = new Label { Left = rightPanelStartX, Top = 15, Width = 540, Text = "輸出紀錄：" };
@@ -255,6 +256,7 @@ namespace AutoDNS
 
         private static Dictionary<string, string> exePathListKVP = new Dictionary<string, string>();
         private static string prevDnsProvider = "";
+        private static string prevGroupDnsSelection = "";
 
         public MainForm()
         {
@@ -549,71 +551,13 @@ namespace AutoDNS
         //    grpProvider.Enabled = !chkAdGuard.Checked && !chkDhcp.Checked;
         //}
 
-        private static bool ProgramIsRunning(string fullPath)
-        {
-            // 標準化並去掉尾端斜線
-            string target = Path.GetFullPath(fullPath)
-                              .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        
 
-            string exeName = Path.GetFileNameWithoutExtension(target);
-
-            foreach (var p in Process.GetProcessesByName(exeName))
-            {
-                try
-                {
-                    string procPath = Path.GetFullPath(p.MainModule!.FileName)
-                                           .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-
-                    if (string.Equals(procPath, target, StringComparison.OrdinalIgnoreCase))
-                        return true; // 同檔名、同完整路徑 → 命中
-                }
-                catch (Win32Exception)
-                {
-                    // 權限不足或跨位元數，略過即可
-                }
-                catch (InvalidOperationException)
-                {
-                    // 行程可能在讀取前就結束了，略過
-                }
-                finally
-                {
-                    p.Dispose(); // 釋放資源
-                }
-            }
-            return false;
-        }
-
-        private void clearSelectedDns()
-        {
-            rbHiNet.Checked = false;
-            rbCloudflare.Checked = false;
-            rbGoogle.Checked = false;
-            chkAdGuard.Checked = false;
-            chkDhcp.Checked = false;
-        }
+        
 
         private async Task autoDnsSwitch()
         {
-            //string exePath = @"C:\Windows\notepad.exe";
-            string exePath = @"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe";
-            bool isRunning = ProgramIsRunning(exePath);
-            //string message = isRunning ? "AutoDNS 已在執行中。" : "AutoDNS 未在執行中。";
-            //Program.ShowDarkInfo(this, message, "AutoDNS 狀態");
 
-
-            //Log(isRunning ? "Yes" : "No");
-            //if (isRunning)
-            //{
-            //    clearSelectedDns();
-            //    rbGoogle.Checked = true;
-            //    await ApplyAsync();
-
-            //}
-
-            //foreach (var kvp in exePathListKVP)
-            //{
-            //    Log($"Key: {kvp.Key}, Value: {kvp.Value}");
-            //}
             bool matchAnyExe = false;
             var matchedExe = new KeyValuePair<string, string>();
             foreach (var kvp in exePathListKVP)
@@ -631,30 +575,7 @@ namespace AutoDNS
 
                 if (prevDnsProvider != matchedExe.Value)
                 {
-                    clearSelectedDns();
-                    switch (matchedExe.Value)
-                    {
-                        case "AdGuard":
-                            chkAdGuard.Checked = true;
-                            break;
-                        case "Dhcp":
-                            chkDhcp.Checked = true;
-                            break;
-                        case "HiNet":
-                            rbHiNet.Checked = true;
-                            break;
-                        case "Cloudflare":
-                            rbCloudflare.Checked = true;
-                            break;
-                        case "Google":
-                            rbGoogle.Checked = true;
-                            break;
-                        default:
-                            chkAdGuard.Checked = true; //fallback to adguard
-                            break;
-                    }
-                    await ApplyAsync();
-                    Log($"Switched to {matchedExe.Value} DNS provider.");
+                    await DnsSwitcher(matchedExe.Value);
                 }
                 else
                 {
@@ -663,26 +584,89 @@ namespace AutoDNS
             }
             else
             {
-                Log("No matched exe running, revert to AdGuard DNS");
-                if (prevDnsProvider != "AdGuard")
-                {
-                    clearSelectedDns();
-                    chkAdGuard.Checked = true;
-                    await ApplyAsync();
-                    Log("Switched to AdGuard DNS provider.");
-                }
-                else
-                {
-                    Log("Same DNS provider as before, no need to re-apply.");
-                }
+                Log("No matched exe running, revert to previous DNS");
+                await DnsSwitcher(prevDnsProvider);
 
             }
+
+            async Task DnsSwitcher(string targetDns)
+            {
+                clearSelectedDns();
+                switch (targetDns)
+                {
+                    case "AdGuard":
+                        chkAdGuard.Checked = true;
+                        Log("1");
+                        break;
+                    case "Dhcp":
+                        chkDhcp.Checked = true;
+                        Log("2");
+                        break;
+                    case "HiNet":
+                        rbHiNet.Checked = true;
+                        Log("3");
+                        break;
+                    case "Cloudflare":
+                        rbCloudflare.Checked = true;
+                        Log("4");
+                        break;
+                    case "Google":
+                        rbGoogle.Checked = true;
+                        Log("5");
+                        break;
+                    default:
+                        chkAdGuard.Checked = true; //fallback to adguard
+                        Log("6");
+                        break;
+                }
+                await ApplyAsync();
+                Log($"Switched to {targetDns} DNS provider.");
+            }
+
+            void clearSelectedDns()
+            {
+                rbHiNet.Checked = false;
+                rbCloudflare.Checked = false;
+                rbGoogle.Checked = false;
+                chkAdGuard.Checked = false;
+                chkDhcp.Checked = false;
+            }
+
+            static bool ProgramIsRunning(string fullPath)
+            {
+                // 標準化並去掉尾端斜線
+                string target = Path.GetFullPath(fullPath)
+                                  .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                string exeName = Path.GetFileNameWithoutExtension(target);
+
+                foreach (var p in Process.GetProcessesByName(exeName))
+                {
+                    try
+                    {
+                        string procPath = Path.GetFullPath(p.MainModule!.FileName)
+                                               .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+                        if (string.Equals(procPath, target, StringComparison.OrdinalIgnoreCase))
+                            return true; // 同檔名、同完整路徑 → 命中
+                    }
+                    catch (Win32Exception)
+                    {
+                        // 權限不足或跨位元數，略過即可
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // 行程可能在讀取前就結束了，略過
+                    }
+                    finally
+                    {
+                        p.Dispose(); // 釋放資源
+                    }
+                }
+                return false;
+            }
+        
         }
-
-
-        //current question: should remember the manual selected dns before auto switch?
-
-
 
 
         public static class ProviderLookup
@@ -736,67 +720,6 @@ namespace AutoDNS
             }
         }
 
-
-
-
-        //public static class ProviderLookup
-        //{
-        //    public static string GetProviderForExe(string exeFullPath, string jsonFileName = "exePath.json")
-        //    {
-        //        const string FALLBACK = "AdGuard";
-        //        if (string.IsNullOrWhiteSpace(exeFullPath)) return FALLBACK;
-
-        //        // 標準化查詢 Key
-        //        string key = NormalizePath(exeFullPath);
-
-        //        // 找同目錄的 json
-        //        string baseDir = AppDomain.CurrentDomain.BaseDirectory; // 兼容 WinForms/.NET Framework
-        //        string jsonPath = Path.Combine(baseDir, jsonFileName);
-        //        if (!File.Exists(jsonPath)) return FALLBACK;
-
-        //        try
-        //        {
-        //            using var fs = File.OpenRead(jsonPath);
-        //            using var doc = JsonDocument.Parse(fs);
-
-        //            // expect：{ "C:\\exampleDir\\example.exe": "Cloudflare", ... }
-        //            // 讀取時也把 JSON 裡的 Key 做路徑標準化，並用不分大小寫比較
-        //            var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        //            foreach (var prop in doc.RootElement.EnumerateObject())
-        //            {
-        //                string k = NormalizePath(prop.Name);
-        //                string? v = prop.Value.GetString();
-        //                if (!string.IsNullOrWhiteSpace(k) && !string.IsNullOrWhiteSpace(v))
-        //                    map[k] = v!;
-        //            }
-
-        //            return map.TryGetValue(key, out var provider) ? provider : FALLBACK;
-        //        }
-        //        catch
-        //        {
-        //            // JSON 壞掉或其他例外一律走預設
-        //            return FALLBACK;
-        //        }
-        //    }
-
-        //    private static string NormalizePath(string path)
-        //    {
-        //        try
-        //        {
-        //            // 轉成完整路徑 & 去掉尾端斜線，Windows 用 OrdinalIgnoreCase 比較
-        //            return Path.GetFullPath(path)
-        //                       .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        //        }
-        //        catch
-        //        {
-        //            // 無效路徑就原樣修剪
-        //            return path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        //        }
-        //    }
-        //}
-
-
-
         private bool IsSupportedType(NetworkInterfaceType t)
         {
             // 基本：乙太網路、Wi‑Fi
@@ -846,17 +769,7 @@ namespace AutoDNS
             for (int i = 0; i < clbIfaces.Items.Count; i++) clbIfaces.SetItemChecked(i, check);
         }
 
-        private DnsProfile CurrentProfile()
-        {
-            if (chkAdGuard.Checked) return AdGuard;
-            if (rbHiNet.Checked) return HiNet;
-            if (rbGoogle.Checked) return Google;
-            if (rbCloudflare.Checked) return Cloudflare;
-            if (chkDhcp.Checked) return DhcpPlaceHolder;
-            return AdGuard;
-        }
-
-        private async Task ApplyAsync()
+        private async Task ApplyAsync([CallerMemberName] string? caller = null)
         {
             var selected = clbIfaces.CheckedItems.Cast<InterfaceItem>().ToList();
             if (selected.Count == 0)
@@ -869,7 +782,12 @@ namespace AutoDNS
 
             if (chkDhcp.Checked)
             {
-                prevDnsProvider = profile.Name;
+                Log($"\nCALLER: {caller}");
+                if (caller != nameof(autoDnsSwitch))
+                {
+                    prevDnsProvider = profile.Name;
+                    Log($"SAVED PREVDNS: {prevDnsProvider}");
+                }
                 await SetDhcpAsync(selected);
                 return;
             }
@@ -918,7 +836,25 @@ namespace AutoDNS
                 Program.ShowDarkInfo(this, $"已套用：{profile.Name} DNS\n", "AutoDNS");
             }
 
-            prevDnsProvider = profile.Name;
+
+            Log($"\nCALLER: {caller}");
+
+            if (caller != nameof(autoDnsSwitch))
+            {
+                prevDnsProvider = profile.Name;
+                Log($"SAVED PREVDNS: {prevDnsProvider}");
+
+            }
+
+            DnsProfile CurrentProfile()
+            {
+                if (chkAdGuard.Checked) return AdGuard;
+                if (chkDhcp.Checked) return DhcpPlaceHolder;
+                if (rbHiNet.Checked) return HiNet;
+                if (rbGoogle.Checked) return Google;
+                if (rbCloudflare.Checked) return Cloudflare;
+                return AdGuard;
+            }
 
         }
 
