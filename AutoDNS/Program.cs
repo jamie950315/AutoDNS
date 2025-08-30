@@ -551,9 +551,13 @@ namespace AutoDNS
         //    grpProvider.Enabled = !chkAdGuard.Checked && !chkDhcp.Checked;
         //}
 
-        
 
-        
+
+        //current issue:
+        //unchecks all dns causing when no exe match will clear groupbox dns selection
+        // step: uncheck adguard or dhcp then hit isExeRunning then 
+        //weird issue: when applying dns and then hit isExeRunning will connect to google, prob due to cmd is running scripts
+
 
         private async Task autoDnsSwitch()
         {
@@ -591,36 +595,43 @@ namespace AutoDNS
 
             async Task DnsSwitcher(string targetDns)
             {
-                clearSelectedDns();
-                switch (targetDns)
+                if (CurrentProfile().Name != targetDns)
                 {
-                    case "AdGuard":
-                        chkAdGuard.Checked = true;
-                        Log("1");
-                        break;
-                    case "Dhcp":
-                        chkDhcp.Checked = true;
-                        Log("2");
-                        break;
-                    case "HiNet":
-                        rbHiNet.Checked = true;
-                        Log("3");
-                        break;
-                    case "Cloudflare":
-                        rbCloudflare.Checked = true;
-                        Log("4");
-                        break;
-                    case "Google":
-                        rbGoogle.Checked = true;
-                        Log("5");
-                        break;
-                    default:
-                        chkAdGuard.Checked = true; //fallback to adguard
-                        Log("6");
-                        break;
+                    clearSelectedDns();
+                    switch (targetDns)
+                    {
+                        case "AdGuard":
+                            chkAdGuard.Checked = true;
+                            Log("1");
+                            break;
+                        case "Dhcp":
+                            chkDhcp.Checked = true;
+                            Log("2");
+                            break;
+                        case "HiNet":
+                            rbHiNet.Checked = true;
+                            Log("3");
+                            break;
+                        case "Cloudflare":
+                            rbCloudflare.Checked = true;
+                            Log("4");
+                            break;
+                        case "Google":
+                            rbGoogle.Checked = true;
+                            Log("5");
+                            break;
+                        default:
+                            chkAdGuard.Checked = true; //fallback to adguard
+                            Log("6");
+                            break;
+                    }
+                    await ApplyAsync();
+                    Log($"Switched to {targetDns} DNS provider.");
                 }
-                await ApplyAsync();
-                Log($"Switched to {targetDns} DNS provider.");
+                else
+                {
+                    Log("Same DNS provider as before, no need to re-apply.");
+                }
             }
 
             void clearSelectedDns()
@@ -667,7 +678,6 @@ namespace AutoDNS
             }
         
         }
-
 
         public static class ProviderLookup
         {
@@ -768,7 +778,17 @@ namespace AutoDNS
         {
             for (int i = 0; i < clbIfaces.Items.Count; i++) clbIfaces.SetItemChecked(i, check);
         }
-
+        
+        public DnsProfile CurrentProfile()
+        {
+            if (chkAdGuard.Checked) return AdGuard;
+            if (chkDhcp.Checked) return DhcpPlaceHolder;
+            if (rbHiNet.Checked) return HiNet;
+            if (rbGoogle.Checked) return Google;
+            if (rbCloudflare.Checked) return Cloudflare;
+            return AdGuard;
+        }
+        
         private async Task ApplyAsync([CallerMemberName] string? caller = null)
         {
             var selected = clbIfaces.CheckedItems.Cast<InterfaceItem>().ToList();
@@ -846,16 +866,6 @@ namespace AutoDNS
 
             }
 
-            DnsProfile CurrentProfile()
-            {
-                if (chkAdGuard.Checked) return AdGuard;
-                if (chkDhcp.Checked) return DhcpPlaceHolder;
-                if (rbHiNet.Checked) return HiNet;
-                if (rbGoogle.Checked) return Google;
-                if (rbCloudflare.Checked) return Cloudflare;
-                return AdGuard;
-            }
-
         }
 
         private async Task SetDhcpAsync(List<InterfaceItem> selected)
@@ -917,7 +927,7 @@ namespace AutoDNS
                 }
             }
 
-            // 若未開啟紀錄視圖，彙整摘要以 MessageBox 顯示（行為與 Flush 類似）
+            // 彙整摘要以 MessageBox 顯示
             try
             {
                 var summarySb = new StringBuilder();
