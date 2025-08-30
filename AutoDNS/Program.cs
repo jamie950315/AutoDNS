@@ -230,7 +230,7 @@ namespace AutoDNS
         private CheckBox chkDhcp;
         private GroupBox grpProvider;
         private RadioButton rbHiNet, rbCloudflare, rbGoogle;
-        private Button btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, btnDoneSelect, btnClearLogs, btnExeRunning;
+        private Button btnApplyDns, btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache, btnDoneSelect, btnClearLogs, btnExeRunning, btnDisable;
         private TextBox txtLog;
 
         // Logs toggle state (default OFF)
@@ -240,6 +240,8 @@ namespace AutoDNS
 
         private bool isPerforming = false;
 
+        private bool isAutoSwitchEnabled = false;
+
         // Profiles
         private readonly DnsProfile AdGuard = new("AdGuard", "94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff");
         private readonly DnsProfile HiNet = new("HiNet", "168.95.1.1", "168.95.192.1", "2001:b000:168::1", "2001:b000:168::2");
@@ -247,7 +249,7 @@ namespace AutoDNS
         private readonly DnsProfile Google = new("Google", "8.8.8.8", "8.8.4.4", "2001:4860:4860::8888", "2001:4860:4860::8844");
         private readonly DnsProfile DhcpPlaceHolder = new("Dhcp", "", "", "", "");
 
-        private Label lblIf = new Label { Left = rightPanelStartX, Top = 15, Width = 540, Text = "選擇要套用的網路介面 (乙太網路 / Wi‑Fi / 進階可選)：" };
+        private Label lbSelectInterface = new Label { Left = rightPanelStartX, Top = 15, Width = 540, Text = "選擇要套用的網路介面 (乙太網路 / Wi‑Fi / 進階可選)：" };
         private Label logTitle = new Label { Left = rightPanelStartX, Top = 15, Width = 540, Text = "輸出紀錄：" };
 
         //Panel edges
@@ -258,7 +260,7 @@ namespace AutoDNS
 
         private static Dictionary<string, string> exePathListKVP = new Dictionary<string, string>();
         private static string prevDnsProvider = "";
-        private static string prevGroupDnsSelection = "";
+        private static string realConnectedDns = "";
 
         public MainForm()
         {
@@ -297,8 +299,6 @@ namespace AutoDNS
             {
                 bool locked = chkAdGuard.Checked || chkDhcp.Checked;
 
-                // 保持 GroupBox 啟用，避免變回系統字色
-                grpProvider.Enabled = true;
                 grpProvider.ForeColor = locked ? TextBg : TextFg;
                 grpProvider.BackColor = DarkBg;
 
@@ -311,7 +311,7 @@ namespace AutoDNS
                 }
             }
 
-
+         
 
             void ApplyDarkMode()
             {
@@ -352,11 +352,13 @@ namespace AutoDNS
                 }
 
                 // 按鈕：一般按鈕走暗色，主要動作按鈕走 Accent
-                if (btnApply != null) StyleButton(btnApply, AccentBg, Color.White, AccentHover, AccentDown);
+                //add colored button here
+                if (btnApplyDns != null) StyleButton(btnApplyDns, AccentBg, Color.White, AccentHover, AccentDown);
                 if (btnClearLogs != null) StyleButton(btnClearLogs, AccentBg, Color.White, AccentHover, AccentDown);
                 if (btnDoneSelect != null) StyleButton(btnDoneSelect, AccentBg, Color.White, AccentHover, AccentDown);
 
-                foreach (var b in new[] { btnRefresh, btnShow, btnToggleLogs, btnFlush, btnExeRunning })
+                //add normal button here
+                foreach (var b in new[] { btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache, btnExeRunning, btnDisable })
                 {
                     if (b != null) StyleButton(b, BtnBg, TextFg, BtnHover, BtnDown);
                 }
@@ -383,18 +385,18 @@ namespace AutoDNS
             grpProvider.Controls.AddRange(new Control[] { rbHiNet, rbCloudflare, rbGoogle });
             
             // 設定按鈕
-            btnFlush = new Button { Left = 15, Top = 265, Width = 97, Height = 30, Text = "清除 DNS 快取" };
-            btnRefresh = new Button { Left = 122, Top = 265, Width = 98, Height = 30, Text = "掃描介面卡" };
-            btnShow = new Button { Left = 230, Top = 265, Width = 97, Height = 30, Text = "顯示目前 DNS" };
+            btnFlushDnsCache = new Button { Left = 15, Top = 265, Width = 97, Height = 30, Text = "清除 DNS 快取" };
+            btnRefreshInterface = new Button { Left = 122, Top = 265, Width = 98, Height = 30, Text = "掃描介面卡" };
+            btnShowCurrentDns = new Button { Left = 230, Top = 265, Width = 97, Height = 30, Text = "顯示目前 DNS" };
             btnToggleLogs = new Button { Left = 337, Top = 265, Width = 98, Height = 30, Text = "顯示紀錄：關" };
-            btnApply = new Button { Left = 15, Top = 305, Width = 420, Height = 30, Text = "套用設定" };
+            btnApplyDns = new Button { Left = 15, Top = 305, Width = 420, Height = 30, Text = "套用設定" };
 
-            btnApply.Click += async (s, e) => await ApplyAsync();
-            btnRefresh.Click += (s, e) => InitInterfaces();
+            btnApplyDns.Click += async (s, e) => await ApplyAsync();
+            btnRefreshInterface.Click += (s, e) => InitInterfaces();
             
-            btnShow.Click += async (s, e) => await ShowDnsAsync();
+            btnShowCurrentDns.Click += async (s, e) => await ShowDnsAsync();
             btnToggleLogs.Click += (s, e) => ToggleLogs();
-            btnFlush.Click += async (s, e) => await FlushDnsAsync();
+            btnFlushDnsCache.Click += async (s, e) => await FlushDnsAsync();
 
             // 設定介面選擇區
             clbIfaces = new CheckedListBox { Left = rightPanelStartX, Top = 40, Width = 400, Height = 255, CheckOnClick = true };    //Select network interfaces
@@ -404,7 +406,7 @@ namespace AutoDNS
             btnDoneSelect.Click += (s, e) => doneSelect();
 
             // Bottom label
-            var lblInfo = new Label
+            var lbBottomBarInfo = new Label
             {
                 Left = 15,
                 Top = 340,
@@ -412,7 +414,7 @@ namespace AutoDNS
                 Height = 30,
                 Text = "提示：需要系統管理員權限。若設定未生效可嘗試重新連線或清除 DNS 快取。"
             };
-            lblInfo.Visible = false;
+            lbBottomBarInfo.Visible = false;
 
 
             //log output box
@@ -424,11 +426,15 @@ namespace AutoDNS
 
 
             //is exe running
-            btnExeRunning = new Button { Left = 15, Top = 340, Width = 420, Height = 30, Text = "isExeRunning?" };
+            btnExeRunning = new Button { Left = 15, Top = 340, Width = 195, Height = 30, Text = "isExeRunning?" };
             btnExeRunning.Click += (s, e) => autoDnsSwitch();
 
+            btnDisable = new Button { Left = 225, Top = 340, Width = 195, Height = 30, Text = "Disable AutoSwitch" };
+            btnDisable.Click += (s, e) => disableAutoSwitch();
 
-            Controls.AddRange(new Control[] { lblIf, lblInfo, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApply, btnRefresh, btnShow, btnToggleLogs, btnFlush, txtLog, btnDoneSelect, btnClearLogs, logTitle, btnExeRunning });
+
+            //add all controls to form
+            Controls.AddRange(new Control[] { lbSelectInterface, lbBottomBarInfo, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApplyDns, btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache, txtLog, btnDoneSelect, btnClearLogs, logTitle, btnExeRunning, btnDisable });
 
 
             ApplyDarkMode();
@@ -451,7 +457,7 @@ namespace AutoDNS
         {
             if (isInterfaceVisible)
             {
-                lblIf.Visible = true;
+                lbSelectInterface.Visible = true;
                 clbIfaces.Visible = true;
                 chkSelectAll.Visible = true;
                 chkIncludeAdvanced.Visible = true;
@@ -459,7 +465,7 @@ namespace AutoDNS
             }
             else
             {
-                lblIf.Visible = false;
+                lbSelectInterface.Visible = false;
                 clbIfaces.Visible = false;
                 chkSelectAll.Visible = false;
                 chkIncludeAdvanced.Visible = false;
@@ -546,14 +552,7 @@ namespace AutoDNS
             }
 
         }
-
-        //dns provider light mode
-        //private void UpdateProviderEnable()
-        //{
-        //    grpProvider.Enabled = !chkAdGuard.Checked && !chkDhcp.Checked;
-        //}
-
-
+        
 
         //current issue:
         //unchecks all dns causing when no exe match will clear groupbox dns selection
@@ -563,7 +562,7 @@ namespace AutoDNS
 
         private async Task autoDnsSwitch()
         {
-
+           
 
             //prob will be an issue after implementing auto do ts for interval
             if (isPerforming)
@@ -573,6 +572,8 @@ namespace AutoDNS
             }
             isPerforming = true;
 
+            isAutoSwitchEnabled = true;
+            UIDisable();
 
             bool matchAnyExe = false;
             var matchedExe = new KeyValuePair<string, string>();
@@ -580,7 +581,7 @@ namespace AutoDNS
             {
                 if (ProgramIsRunning(kvp.Key))
                 {
-                    matchAnyExe = true;
+                    matchAnyExe = true; //upper exe path got higher priority
                     matchedExe = kvp;
                     break;
                 }
@@ -589,26 +590,23 @@ namespace AutoDNS
             {
                 Log($"Key: {matchedExe.Key}, Value: {matchedExe.Value}");
 
-                if (prevDnsProvider != matchedExe.Value)
+                if (!checkIfSameDns(prevDnsProvider, matchedExe.Value))
                 {
                     await DnsSwitcher(matchedExe.Value);
-                }
-                else
-                {
-                    Log("Same DNS provider as before, no need to re-apply.");
                 }
             }
             else
             {
                 Log("No matched exe running, revert to previous DNS");
                 await DnsSwitcher(prevDnsProvider);
-
             }
 
             async Task DnsSwitcher(string targetDns)
             {
-                if (CurrentProfile().Name != targetDns)
+
+                if (!checkIfSameDns(CurrentProfile().Name, targetDns))
                 {
+                    isPerforming = false;   //release lock to avoid deadlock in ApplyAsync
                     clearSelectedDns();
                     switch (targetDns)
                     {
@@ -639,11 +637,9 @@ namespace AutoDNS
                     }
                     await ApplyAsync();
                     Log($"Switched to {targetDns} DNS provider.");
+                    isPerforming = true;   //reacquire lock
                 }
-                else
-                {
-                    Log("Same DNS provider as before, no need to re-apply.");
-                }
+
             }
 
             isPerforming = false;
@@ -691,6 +687,103 @@ namespace AutoDNS
                 return false;
             }
         
+        }
+
+        private void disableAutoSwitch()
+        {
+            isAutoSwitchEnabled = false;
+            UIEnable();
+            
+
+            
+        }
+
+
+        private void UIDisable()
+        {
+            Color DarkBg = Color.FromArgb(28, 28, 30);
+            Color TextBg = Color.DimGray;
+
+            rbHiNet.Checked = false;
+            rbCloudflare.Checked = false;
+            rbGoogle.Checked = false;
+            chkAdGuard.Checked = false;
+            chkDhcp.Checked = false;
+
+            grpProvider.ForeColor = TextBg;
+            grpProvider.BackColor = DarkBg;
+
+            foreach (var rb in new RadioButton[] { rbHiNet, rbCloudflare, rbGoogle })
+            {
+                rb.AutoCheck = false;
+                rb.Cursor = Cursors.No;
+                rb.ForeColor = TextBg;
+                rb.BackColor = DarkBg;
+            }
+
+            foreach (var cb in new CheckBox[] { chkAdGuard, chkDhcp })
+            {
+                cb.AutoCheck = false;
+                cb.Cursor = Cursors.No;
+                cb.ForeColor = TextBg;
+                cb.BackColor = DarkBg;
+            }
+
+        }
+
+        private void UIEnable()
+        {
+
+
+
+            Color DarkBg = Color.FromArgb(28, 28, 30);
+            Color PanelBg = Color.FromArgb(38, 38, 42);
+            Color TextFg = Color.White;
+            Color TextBg = Color.DimGray;
+
+            bool locked = chkAdGuard.Checked || chkDhcp.Checked;
+
+            grpProvider.ForeColor = locked ? TextBg : TextFg;
+            grpProvider.BackColor = DarkBg;
+
+            foreach (var rb in new[] { rbHiNet, rbCloudflare, rbGoogle })
+            {
+                rb.AutoCheck = !locked;        // 鎖住選擇確保深色主題字色
+                rb.Cursor = locked ? Cursors.No : Cursors.Default;
+                rb.ForeColor = locked ? TextBg : TextFg;
+                rb.BackColor = DarkBg;
+            }
+
+            foreach (var cb in new CheckBox[] { chkAdGuard, chkDhcp })
+            {
+                cb.AutoCheck = true;
+                cb.Cursor = Cursors.Default;
+                cb.ForeColor = TextFg;
+                cb.BackColor = DarkBg;
+            }
+
+            switch (realConnectedDns)
+            {
+                case "AdGuard":
+                    chkAdGuard.Checked = true;
+                    break;
+                case "Dhcp":
+                    chkDhcp.Checked = true;
+                    break;
+                case "HiNet":
+                    rbHiNet.Checked = true;
+                    break;
+                case "Cloudflare":
+                    rbCloudflare.Checked = true;
+                    break;
+                case "Google":
+                    rbGoogle.Checked = true;
+                    break;
+                default:
+                    chkAdGuard.Checked = true; //fallback to adguard
+                    break;
+            }
+
         }
 
         public static class ProviderLookup
@@ -744,6 +837,19 @@ namespace AutoDNS
             }
         }
 
+        private bool checkIfSameDns(string OGDns, string NBDns)
+        {
+            if(OGDns == NBDns)
+            {
+                Log("Same DNS provider as before, no need to re-apply.");
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
         private bool IsSupportedType(NetworkInterfaceType t)
         {
             // 基本：乙太網路、Wi‑Fi
@@ -783,8 +889,8 @@ namespace AutoDNS
                 clbIfaces.Items.Add(item, shouldCheck);
             }
 
-            // 若是由 btnRefresh 觸發
-            if (ActiveControl == btnRefresh)
+            // 若是由 btnRefreshInterface 觸發
+            if (ActiveControl == btnRefreshInterface)
             {
                 expandWindow(true);
                 controlLogUI(false);
@@ -807,7 +913,7 @@ namespace AutoDNS
         
         public DnsProfile CurrentProfile()
         {
-            if (chkAdGuard.Checked) return AdGuard;
+            if (chkAdGuard.Checked) return AdGuard; //AdGuard and Dhcp can override other selections
             if (chkDhcp.Checked) return DhcpPlaceHolder;
             if (rbHiNet.Checked) return HiNet;
             if (rbGoogle.Checked) return Google;
@@ -817,11 +923,25 @@ namespace AutoDNS
 
         private async Task ApplyAsync([CallerMemberName] string? caller = null)
         {
+
+            if (isAutoSwitchEnabled && caller != nameof(autoDnsSwitch))
+            {
+                Program.ShowDarkInfo(this, "自動切換功能已啟用，請先停用後再手動套用。", "AutoDNS");
+                return;
+            }
+
             if (isPerforming)
             {
                 Program.ShowDarkInfo(this, "目前有其他操作正在進行中，請稍後再試。", "AutoDNS");
                 return;
             }
+
+            if (checkIfSameDns(realConnectedDns, CurrentProfile().Name))
+            {
+                return;
+            }
+            
+            realConnectedDns = CurrentProfile().Name;
 
             var selected = clbIfaces.CheckedItems.Cast<InterfaceItem>().ToList();
             if (selected.Count == 0)
@@ -907,11 +1027,20 @@ namespace AutoDNS
 
         private async Task SetDhcpAsync(List<InterfaceItem> selected)
         {
+
+            if (isPerforming)
+            {
+                Program.ShowDarkInfo(this, "目前有其他操作正在進行中，請稍後再試。", "AutoDNS");
+                return;
+            }
+
             if (selected.Count == 0)
             {
                 Program.ShowDarkInfo(this, "請至少選擇一個介面。", "AutoDNS");
                 return;
             }
+
+            isPerforming = true;
 
             Log("\r\n=== 恢復自動取得(DHCP) ===");
             foreach (var nic in selected)
@@ -938,6 +1067,8 @@ namespace AutoDNS
             Log("\r\n完成。若應用程式/瀏覽器仍未生效，請嘗試重新連線或清除 DNS 快取：ipconfig /flushdns");
 
             Program.ShowDarkInfo(this, "已切換為自動取得 (DHCP)\n", "AutoDNS");
+
+            isPerforming = false;
         }
 
         private async Task ShowDnsAsync()
