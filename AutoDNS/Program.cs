@@ -238,6 +238,8 @@ namespace AutoDNS
 
         private bool isInInterface = false;
 
+        private bool isPerforming = false;
+
         // Profiles
         private readonly DnsProfile AdGuard = new("AdGuard", "94.140.14.14", "94.140.15.15", "2a10:50c0::ad1:ff", "2a10:50c0::ad2:ff");
         private readonly DnsProfile HiNet = new("HiNet", "168.95.1.1", "168.95.192.1", "2001:b000:168::1", "2001:b000:168::2");
@@ -379,7 +381,7 @@ namespace AutoDNS
             rbGoogle = new RadioButton { Left = 20, Top = 85, Width = 350, Text = "Google (8.8.8.8 / 2001:4860:4860::8888)" };
             rbCloudflare.Checked = true;
             grpProvider.Controls.AddRange(new Control[] { rbHiNet, rbCloudflare, rbGoogle });
-
+            
             // 設定按鈕
             btnFlush = new Button { Left = 15, Top = 265, Width = 97, Height = 30, Text = "清除 DNS 快取" };
             btnRefresh = new Button { Left = 122, Top = 265, Width = 98, Height = 30, Text = "掃描介面卡" };
@@ -556,11 +558,21 @@ namespace AutoDNS
         //current issue:
         //unchecks all dns causing when no exe match will clear groupbox dns selection
         // step: uncheck adguard or dhcp then hit isExeRunning then 
-        //weird issue: when applying dns and then hit isExeRunning will connect to google, prob due to cmd is running scripts
+        // nvm leave ts rn prob wont fix cuz too lazy
 
 
         private async Task autoDnsSwitch()
         {
+
+
+            //prob will be an issue after implementing auto do ts for interval
+            if (isPerforming)
+            {
+                Program.ShowDarkInfo(this, "目前有其他操作正在進行中，請稍後再試。", "AutoDNS");
+                return;
+            }
+            isPerforming = true;
+
 
             bool matchAnyExe = false;
             var matchedExe = new KeyValuePair<string, string>();
@@ -633,6 +645,8 @@ namespace AutoDNS
                     Log("Same DNS provider as before, no need to re-apply.");
                 }
             }
+
+            isPerforming = false;
 
             void clearSelectedDns()
             {
@@ -745,6 +759,15 @@ namespace AutoDNS
 
         private void InitInterfaces()
         {
+
+            if (isPerforming)
+            {
+                Program.ShowDarkInfo(this, "目前有其他操作正在進行中，請稍後再試。", "AutoDNS");
+                return;
+            }
+
+            isPerforming = true;
+
             // 保留原先勾選的介面（以 GUID 標識）
             var previouslyChecked = new HashSet<string>(clbIfaces.CheckedItems.Cast<InterfaceItem>().Select(x => x.Id));
 
@@ -772,6 +795,9 @@ namespace AutoDNS
                     "請選擇要套用的介面，並點擊「套用設定」。\n" +
                     "若需要包含進階/虛擬介面，請勾選「包含進階/虛擬/撥接介面」。", "AutoDNS");
             }
+
+            isPerforming = false;
+
         }
 
         private void SelectAllUpInterfaces(bool check)
@@ -788,15 +814,23 @@ namespace AutoDNS
             if (rbCloudflare.Checked) return Cloudflare;
             return AdGuard;
         }
-        
+
         private async Task ApplyAsync([CallerMemberName] string? caller = null)
         {
+            if (isPerforming)
+            {
+                Program.ShowDarkInfo(this, "目前有其他操作正在進行中，請稍後再試。", "AutoDNS");
+                return;
+            }
+
             var selected = clbIfaces.CheckedItems.Cast<InterfaceItem>().ToList();
             if (selected.Count == 0)
             {
                 Program.ShowDarkInfo(this, "請至少選擇一個介面。", "AutoDNS");
                 return;
             }
+
+            isPerforming = true;
 
             var profile = CurrentProfile();
 
@@ -808,6 +842,7 @@ namespace AutoDNS
                     prevDnsProvider = profile.Name;
                     Log($"SAVED PREVDNS: {prevDnsProvider}");
                 }
+                isPerforming = false;
                 await SetDhcpAsync(selected);
                 return;
             }
@@ -866,6 +901,8 @@ namespace AutoDNS
 
             }
 
+            isPerforming = false;
+
         }
 
         private async Task SetDhcpAsync(List<InterfaceItem> selected)
@@ -905,12 +942,22 @@ namespace AutoDNS
 
         private async Task ShowDnsAsync()
         {
+
+            if (isPerforming)
+            {
+                Program.ShowDarkInfo(this, "目前有其他操作正在進行中，請稍後再試。", "AutoDNS");
+                return;
+            }
+
             var selected = clbIfaces.CheckedItems.Cast<InterfaceItem>().ToList();
             if (selected.Count == 0)
             {
                 Program.ShowDarkInfo(this, "請至少選擇一個介面。", "AutoDNS");
                 return;
             }
+
+            isPerforming = true;
+
             Log("\n=== 目前 DNS 設定 ===");
             foreach (var nic in selected)
             {
@@ -952,10 +999,22 @@ namespace AutoDNS
 
             }
             catch { }
+
+            isPerforming = false;
+
         }
 
         private async Task FlushDnsAsync()
         {
+
+            if (isPerforming)
+            {
+                Program.ShowDarkInfo(this, "目前有其他操作正在進行中，請稍後再試。", "AutoDNS");
+                return;
+            }
+
+            isPerforming = true;
+
             Log("\r\n=== 清除 DNS 快取 ===");
             int ec = await RunProcessAsync(new ProcessStartInfo
             {
@@ -970,6 +1029,9 @@ namespace AutoDNS
             }, prefix: "ipconfig /flushdns");
 
             Program.ShowDarkInfo(this, ec == 0 ? "DNS 快取已清除" : "DNS 快取清除可能失敗，請查看紀錄。", "AutoDNS");
+        
+            isPerforming = false;
+
         }
 
         private async Task<int> RunNetshAsync(string args)
