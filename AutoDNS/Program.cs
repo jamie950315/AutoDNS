@@ -454,6 +454,7 @@ namespace AutoDNS
             chkAutoSwitch.Checked = false;
             chkAutoSwitch.AutoCheck = false;    //prevent user from clicking before connect to AdGuard from initial run
             chkAutoSwitch.Cursor = Cursors.No;
+            chkAutoSwitch.ForeColor = TextBg;
             chkAutoSwitch.CheckedChanged += (s, e) =>
             {
                 if (chkAutoSwitch.Checked)
@@ -642,6 +643,8 @@ namespace AutoDNS
         //
         // 3. autoSwitch has not been fully tested yet
         // :: too lazy to do it rn, will do it later idk
+        //
+        // 4. didn't block click enable/disable autoSwitch when applying dns, although will block at autoSwitch func but the click state will be wrong
 
 
 
@@ -1151,6 +1154,7 @@ namespace AutoDNS
             {
                 chkAutoSwitch.AutoCheck = true; //allow user to check after first successful apply
                 chkAutoSwitch.Cursor = Cursors.Default;
+                chkAutoSwitch.ForeColor = Color.White;  //TextFg
             }
         }
 
