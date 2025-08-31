@@ -511,7 +511,6 @@ namespace AutoDNS
 
         }
 
-
         private void doneSelect()
         {
             var selected = clbIfaces.CheckedItems.Cast<InterfaceItem>().ToList();
@@ -552,24 +551,24 @@ namespace AutoDNS
             }
 
         }
-        
+
 
         //current issue:
-        //unchecks all dns causing when no exe match will clear groupbox dns selection
+        // 1. unchecks all dns causing when no exe match will clear groupbox dns selection
         // step: uncheck adguard or dhcp then hit isExeRunning then 
         // nvm leave ts rn prob wont fix cuz too lazy
+        // ::prob could fix with realConnectedDns var
+        // well, already fixed ts by UIEnable function, unexpectedly
+        //
+        // 2. is it rly nessary to call UIEnable form another function? y not js call it directly
+        // leave it for now, might need to do more things in the future
 
 
         private async Task autoDnsSwitch()
         {
-           
 
             //prob will be an issue after implementing auto do ts for interval
-            if (isPerforming)
-            {
-                Program.ShowDarkInfo(this, "目前有其他操作正在進行中，請稍後再試。", "AutoDNS");
-                return;
-            }
+            if (DeadLockCheck()) return;
             isPerforming = true;
 
             isAutoSwitchEnabled = true;
@@ -607,34 +606,7 @@ namespace AutoDNS
                 if (!checkIfSameDns(CurrentProfile().Name, targetDns))
                 {
                     isPerforming = false;   //release lock to avoid deadlock in ApplyAsync
-                    clearSelectedDns();
-                    switch (targetDns)
-                    {
-                        case "AdGuard":
-                            chkAdGuard.Checked = true;
-                            Log("1");
-                            break;
-                        case "Dhcp":
-                            chkDhcp.Checked = true;
-                            Log("2");
-                            break;
-                        case "HiNet":
-                            rbHiNet.Checked = true;
-                            Log("3");
-                            break;
-                        case "Cloudflare":
-                            rbCloudflare.Checked = true;
-                            Log("4");
-                            break;
-                        case "Google":
-                            rbGoogle.Checked = true;
-                            Log("5");
-                            break;
-                        default:
-                            chkAdGuard.Checked = true; //fallback to adguard
-                            Log("6");
-                            break;
-                    }
+                    switchCheckProfile(targetDns);
                     await ApplyAsync();
                     Log($"Switched to {targetDns} DNS provider.");
                     isPerforming = true;   //reacquire lock
@@ -644,14 +616,6 @@ namespace AutoDNS
 
             isPerforming = false;
 
-            void clearSelectedDns()
-            {
-                rbHiNet.Checked = false;
-                rbCloudflare.Checked = false;
-                rbGoogle.Checked = false;
-                chkAdGuard.Checked = false;
-                chkDhcp.Checked = false;
-            }
 
             static bool ProgramIsRunning(string fullPath)
             {
@@ -704,11 +668,7 @@ namespace AutoDNS
             Color DarkBg = Color.FromArgb(28, 28, 30);
             Color TextBg = Color.DimGray;
 
-            rbHiNet.Checked = false;
-            rbCloudflare.Checked = false;
-            rbGoogle.Checked = false;
-            chkAdGuard.Checked = false;
-            chkDhcp.Checked = false;
+            clearSelectedDns();
 
             grpProvider.ForeColor = TextBg;
             grpProvider.BackColor = DarkBg;
@@ -733,9 +693,6 @@ namespace AutoDNS
 
         private void UIEnable()
         {
-
-
-
             Color DarkBg = Color.FromArgb(28, 28, 30);
             Color PanelBg = Color.FromArgb(38, 38, 42);
             Color TextFg = Color.White;
@@ -762,7 +719,14 @@ namespace AutoDNS
                 cb.BackColor = DarkBg;
             }
 
-            switch (realConnectedDns)
+            switchCheckProfile(realConnectedDns);
+
+        }
+
+        private void switchCheckProfile(string profileName)
+        {
+            clearSelectedDns();
+            switch (profileName)
             {
                 case "AdGuard":
                     chkAdGuard.Checked = true;
@@ -783,7 +747,25 @@ namespace AutoDNS
                     chkAdGuard.Checked = true; //fallback to adguard
                     break;
             }
+        }
 
+        void clearSelectedDns()
+        {
+            rbHiNet.Checked = false;
+            rbCloudflare.Checked = false;
+            rbGoogle.Checked = false;
+            chkAdGuard.Checked = false;
+            chkDhcp.Checked = false;
+        }
+
+        private bool DeadLockCheck()
+        {
+            if (isPerforming)
+            {
+                Program.ShowDarkInfo(this, "目前有其他操作正在進行中，請稍後再試。", "AutoDNS");
+                return true;
+            }
+            return false;
         }
 
         public static class ProviderLookup
@@ -866,11 +848,7 @@ namespace AutoDNS
         private void InitInterfaces()
         {
 
-            if (isPerforming)
-            {
-                Program.ShowDarkInfo(this, "目前有其他操作正在進行中，請稍後再試。", "AutoDNS");
-                return;
-            }
+            if (DeadLockCheck()) return;
 
             isPerforming = true;
 
@@ -930,11 +908,7 @@ namespace AutoDNS
                 return;
             }
 
-            if (isPerforming)
-            {
-                Program.ShowDarkInfo(this, "目前有其他操作正在進行中，請稍後再試。", "AutoDNS");
-                return;
-            }
+            if (DeadLockCheck()) return;
 
             if (checkIfSameDns(realConnectedDns, CurrentProfile().Name))
             {
@@ -1028,11 +1002,7 @@ namespace AutoDNS
         private async Task SetDhcpAsync(List<InterfaceItem> selected)
         {
 
-            if (isPerforming)
-            {
-                Program.ShowDarkInfo(this, "目前有其他操作正在進行中，請稍後再試。", "AutoDNS");
-                return;
-            }
+            if (DeadLockCheck()) return;
 
             if (selected.Count == 0)
             {
@@ -1074,11 +1044,7 @@ namespace AutoDNS
         private async Task ShowDnsAsync()
         {
 
-            if (isPerforming)
-            {
-                Program.ShowDarkInfo(this, "目前有其他操作正在進行中，請稍後再試。", "AutoDNS");
-                return;
-            }
+            if (DeadLockCheck()) return;
 
             var selected = clbIfaces.CheckedItems.Cast<InterfaceItem>().ToList();
             if (selected.Count == 0)
@@ -1138,11 +1104,7 @@ namespace AutoDNS
         private async Task FlushDnsAsync()
         {
 
-            if (isPerforming)
-            {
-                Program.ShowDarkInfo(this, "目前有其他操作正在進行中，請稍後再試。", "AutoDNS");
-                return;
-            }
+            if (DeadLockCheck()) return;
 
             isPerforming = true;
 
@@ -1230,5 +1192,6 @@ namespace AutoDNS
             { txtLog.Invoke(new Action<string>(Log), msg); return; }
             txtLog.AppendText(msg + Environment.NewLine);
         }
+    
     }
 }
