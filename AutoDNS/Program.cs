@@ -231,7 +231,7 @@ namespace AutoDNS
         private CheckBox chkAutoSwitch;
         private GroupBox grpProvider;
         private RadioButton rbHiNet, rbCloudflare, rbGoogle;
-        private Button btnApplyDns, btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache, btnDoneSelect, btnClearLogs, btnExeRunning, btnDisable;
+        private Button btnApplyDns, btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache, btnDoneSelect, btnClearLogs;
         private TextBox txtLog;
 
         // Logs toggle state (default OFF)
@@ -259,16 +259,23 @@ namespace AutoDNS
         private static int rightPanelEndX = 881;
         private static int expandShiftX = (rightPanelEndX - leftPanelEndX)/2;
 
+        // internal variables
         private static Dictionary<string, string> exePathListKVP = new Dictionary<string, string>();
-        private static string prevDnsProvider = "";
-        private static string realConnectedDns = "";
+        private static string prevDnsProvider = ""; //only saves manually selected DNS, leave as empty for initial run no prompt
+        private static string realConnectedDns = "";    //saves the actually connected DNS, used for switching back when no exe is running
 
+
+        //for custom time interval
+        private static double timerInterval = 5;
+        private NumericUpDown intervalAdjust;
         // 週期控制
         private CancellationTokenSource? autoSwitchCts;
         private Task? autoSwitchTask;
-        private readonly TimeSpan autoPeriod = TimeSpan.FromSeconds(5);
+        private TimeSpan autoPeriod = TimeSpan.FromSeconds(timerInterval);
         // 防重入
         private readonly System.Threading.SemaphoreSlim autoSwitchGate = new(1, 1);
+        
+
 
 
         public MainForm()
@@ -367,9 +374,17 @@ namespace AutoDNS
                 if (btnDoneSelect != null) StyleButton(btnDoneSelect, AccentBg, Color.White, AccentHover, AccentDown);
 
                 //add normal button here
-                foreach (var b in new[] { btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache, btnExeRunning, btnDisable })
+                foreach (var b in new[] { btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache })
                 {
                     if (b != null) StyleButton(b, BtnBg, TextFg, BtnHover, BtnDown);
+                }
+
+                //timerInterval dark mode
+                if (intervalAdjust != null)
+                {
+                    intervalAdjust.BackColor = PanelBg;
+                    intervalAdjust.ForeColor = TextFg;
+                    intervalAdjust.BorderStyle = BorderStyle.FixedSingle;
                 }
 
             }
@@ -434,43 +449,56 @@ namespace AutoDNS
             btnClearLogs.Click += (s, e) => txtLog.Clear();
 
 
-            //is exe running
-            btnExeRunning = new Button { Left = 15, Top = 340, Width = 195, Height = 30, Text = "Enable AutoSwitch" };
-            btnExeRunning.Click += (s, e) => enableAutoSwitch();
-
-            btnDisable = new Button { Left = 225, Top = 340, Width = 195, Height = 30, Text = "Disable AutoSwitch" };
-            btnDisable.Click += (s, e) => disableAutoSwitch();
-
-            btnExeRunning.Visible= false;
-            btnExeRunning.Enabled = false;
-            btnDisable.Visible= false;
-            btnDisable.Enabled = false;
-
-            chkAutoSwitch = new CheckBox { Left = 15, Top = 10, Width = 400, Text = "啟用自動切換" };
+            //enable/disable auto switch
+            chkAutoSwitch = new CheckBox { Left = 15, Top = 10, Width = 200, Text = "啟用/停用自動切換DNS" };
             chkAutoSwitch.Checked = false;
             chkAutoSwitch.AutoCheck = false;    //prevent user from clicking before connect to AdGuard from initial run
+            chkAutoSwitch.Cursor = Cursors.No;
             chkAutoSwitch.CheckedChanged += (s, e) =>
             {
                 if (chkAutoSwitch.Checked)
                 {
-                    if (!isAutoSwitchEnabled)
-                    {
-                        enableAutoSwitch();
-                    }
+                    if (!isAutoSwitchEnabled) enableAutoSwitch();
                 }
                 else
                 {
-                    
-                    if (isAutoSwitchEnabled)
-                    {
-                        disableAutoSwitch();
-                    }
+                    if (isAutoSwitchEnabled) disableAutoSwitch();
                 }
             };
 
+            intervalAdjust = new NumericUpDown
+            {
+                Left = 250,
+                Top = 10,
+                Width = 50,
+                Minimum = 3,
+                Maximum = 9999,
+                Increment = 1,
+                DecimalPlaces = 0,
+                ThousandsSeparator = false,
+                TextAlign = HorizontalAlignment.Right,
+                ReadOnly = false,
+                InterceptArrowKeys = true
+            };
+            intervalAdjust.Value = (decimal)timerInterval;
+            intervalAdjust.ValueChanged += (s, e) =>
+            {
+                timerInterval = (double)intervalAdjust.Value;
+                autoPeriod = TimeSpan.FromSeconds(timerInterval);
+            };
+
+
 
             //add all controls to form
-            Controls.AddRange(new Control[] { lbSelectInterface, lbBottomBarInfo, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApplyDns, btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache, txtLog, btnDoneSelect, btnClearLogs, logTitle, btnExeRunning, btnDisable, chkAutoSwitch });
+            Controls.AddRange(new Control[] { lbSelectInterface, lbBottomBarInfo, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApplyDns, btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache, txtLog, btnDoneSelect, btnClearLogs, logTitle, intervalAdjust, chkAutoSwitch });
+
+
+            // load saved timerInterval
+            timerInterval = Properties.Settings.Default.TimerInterval;
+            if (timerInterval < 3) timerInterval = 3;
+            if (timerInterval > 9999) timerInterval = 9999;
+            intervalAdjust.Value = (decimal)timerInterval;
+            autoPeriod = TimeSpan.FromSeconds(timerInterval);
 
 
             ApplyDarkMode();
@@ -488,6 +516,17 @@ namespace AutoDNS
             
             exePathListKVP = ProviderLookup.OutputKeyValuePair();
         }
+
+
+        // Save settings on close
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            Properties.Settings.Default.TimerInterval = timerInterval;
+            Properties.Settings.Default.Save();
+
+            base.OnFormClosing(e);
+        }
+
 
         private void controlInterfaceUI(bool isInterfaceVisible)
         {
@@ -627,6 +666,7 @@ namespace AutoDNS
         {
 
             //prob will be an issue after implementing auto do ts for interval
+            // ::seems fine now, might need more testing later
             if (DeadLockCheck()) return;
             isPerforming = true;
             
@@ -795,6 +835,8 @@ namespace AutoDNS
                 cb.BackColor = DarkBg;
             }
 
+            intervalAdjust.Enabled = false;
+
         }
 
         private void UIEnable()
@@ -826,6 +868,8 @@ namespace AutoDNS
             }
 
             switchCheckProfile(realConnectedDns);
+
+            intervalAdjust.Enabled = true;
 
         }
 
@@ -1103,8 +1147,11 @@ namespace AutoDNS
 
             isPerforming = false;
 
-            if (!chkAutoSwitch.AutoCheck) chkAutoSwitch.AutoCheck = true; //allow user to check after first successful apply
-
+            if (!chkAutoSwitch.AutoCheck)
+            {
+                chkAutoSwitch.AutoCheck = true; //allow user to check after first successful apply
+                chkAutoSwitch.Cursor = Cursors.Default;
+            }
         }
 
         private async Task SetDhcpAsync(List<InterfaceItem> selected)
