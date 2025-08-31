@@ -426,8 +426,8 @@ namespace AutoDNS
 
 
             //is exe running
-            btnExeRunning = new Button { Left = 15, Top = 340, Width = 195, Height = 30, Text = "isExeRunning?" };
-            btnExeRunning.Click += (s, e) => autoDnsSwitch();
+            btnExeRunning = new Button { Left = 15, Top = 340, Width = 195, Height = 30, Text = "Enable AutoSwitch" };
+            btnExeRunning.Click += (s, e) => enableAutoSwitch();
 
             btnDisable = new Button { Left = 225, Top = 340, Width = 195, Height = 30, Text = "Disable AutoSwitch" };
             btnDisable.Click += (s, e) => disableAutoSwitch();
@@ -561,7 +561,19 @@ namespace AutoDNS
         // well, already fixed ts by UIEnable function, unexpectedly
         //
         // 2. is it rly nessary to call UIEnable form another function? y not js call it directly
-        // leave it for now, might need to do more things in the future
+        // ::leave it for now, might need to do more things in the future
+        // rly need to call UIEnable from other func for stopping autoSwitch
+
+
+
+        private void enableAutoSwitch()
+        {
+            if (DeadLockCheck()) return;
+            if (isAutoSwitchEnabled) return; //prevent multiple enable
+            isAutoSwitchEnabled = true;
+            UIDisable();
+            autoDnsSwitch();
+        }
 
 
         private async Task autoDnsSwitch()
@@ -570,9 +582,7 @@ namespace AutoDNS
             //prob will be an issue after implementing auto do ts for interval
             if (DeadLockCheck()) return;
             isPerforming = true;
-
-            isAutoSwitchEnabled = true;
-            UIDisable();
+            
 
             bool matchAnyExe = false;
             var matchedExe = new KeyValuePair<string, string>();
