@@ -225,9 +225,10 @@ namespace AutoDNS
     {
         private CheckedListBox clbIfaces;
         private CheckBox chkSelectAll;
-        private CheckBox chkIncludeAdvanced; // 新增：包含進階/虛擬介面
+        private CheckBox chkIncludeAdvanced;
         private CheckBox chkAdGuard;
         private CheckBox chkDhcp;
+        private CheckBox chkAutoSwitch;
         private GroupBox grpProvider;
         private RadioButton rbHiNet, rbCloudflare, rbGoogle;
         private Button btnApplyDns, btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache, btnDoneSelect, btnClearLogs, btnExeRunning, btnDisable;
@@ -261,6 +262,14 @@ namespace AutoDNS
         private static Dictionary<string, string> exePathListKVP = new Dictionary<string, string>();
         private static string prevDnsProvider = "";
         private static string realConnectedDns = "";
+
+        // 週期控制
+        private CancellationTokenSource? autoSwitchCts;
+        private Task? autoSwitchTask;
+        private readonly TimeSpan autoPeriod = TimeSpan.FromSeconds(5);
+        // 防重入
+        private readonly System.Threading.SemaphoreSlim autoSwitchGate = new(1, 1);
+
 
         public MainForm()
         {
@@ -432,9 +441,36 @@ namespace AutoDNS
             btnDisable = new Button { Left = 225, Top = 340, Width = 195, Height = 30, Text = "Disable AutoSwitch" };
             btnDisable.Click += (s, e) => disableAutoSwitch();
 
+            btnExeRunning.Visible= false;
+            btnExeRunning.Enabled = false;
+            btnDisable.Visible= false;
+            btnDisable.Enabled = false;
+
+            chkAutoSwitch = new CheckBox { Left = 15, Top = 10, Width = 400, Text = "啟用自動切換" };
+            chkAutoSwitch.Checked = false;
+            chkAutoSwitch.AutoCheck = false;    //prevent user from clicking before connect to AdGuard from initial run
+            chkAutoSwitch.CheckedChanged += (s, e) =>
+            {
+                if (chkAutoSwitch.Checked)
+                {
+                    if (!isAutoSwitchEnabled)
+                    {
+                        enableAutoSwitch();
+                    }
+                }
+                else
+                {
+                    
+                    if (isAutoSwitchEnabled)
+                    {
+                        disableAutoSwitch();
+                    }
+                }
+            };
+
 
             //add all controls to form
-            Controls.AddRange(new Control[] { lbSelectInterface, lbBottomBarInfo, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApplyDns, btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache, txtLog, btnDoneSelect, btnClearLogs, logTitle, btnExeRunning, btnDisable });
+            Controls.AddRange(new Control[] { lbSelectInterface, lbBottomBarInfo, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApplyDns, btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache, txtLog, btnDoneSelect, btnClearLogs, logTitle, btnExeRunning, btnDisable, chkAutoSwitch });
 
 
             ApplyDarkMode();
@@ -563,6 +599,10 @@ namespace AutoDNS
         // 2. is it rly nessary to call UIEnable form another function? y not js call it directly
         // ::leave it for now, might need to do more things in the future
         // rly need to call UIEnable from other func for stopping autoSwitch
+        // huh? seems like everything is fine now bruh
+        //
+        // 3. autoSwitch has not been fully tested yet
+        // :: too lazy to do it rn, will do it later idk
 
 
 
@@ -572,7 +612,14 @@ namespace AutoDNS
             if (isAutoSwitchEnabled) return; //prevent multiple enable
             isAutoSwitchEnabled = true;
             UIDisable();
-            autoDnsSwitch();
+
+            // 先清掉任何殘留
+            autoSwitchCts?.Cancel();
+            autoSwitchCts?.Dispose();
+
+            // 開新一輪背景輪詢
+            autoSwitchCts = new CancellationTokenSource();
+            autoSwitchTask = runAutoSwitchLoopAsync(autoSwitchCts.Token); // 不阻塞 UI
         }
 
 
@@ -667,10 +714,59 @@ namespace AutoDNS
         {
             isAutoSwitchEnabled = false;
             UIEnable();
-            
 
-            
+            // 停止背景輪詢
+            autoSwitchCts?.Cancel();
+            autoSwitchCts?.Dispose();
+            autoSwitchCts = null;
+            autoSwitchTask = null;
+
         }
+
+        private async Task runAutoSwitchLoopAsync(CancellationToken token)
+        {
+
+            // 先跑一次（立即生效）
+            await safeAutoSwitchOnceAsync(token);
+
+            // 固定週期
+            using var timer = new System.Threading.PeriodicTimer(autoPeriod);
+            try
+            {
+                while (await timer.WaitForNextTickAsync(token))
+                {
+                    await safeAutoSwitchOnceAsync(token);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // 正常結束
+            }
+        }
+
+        private async Task safeAutoSwitchOnceAsync(CancellationToken token)
+        {
+            // 防重入：上一輪還在跑就直接跳過這一輪
+            if (!await autoSwitchGate.WaitAsync(0, token)) return;
+
+            try
+            {
+                await autoDnsSwitch();
+            }
+            catch (OperationCanceledException)
+            {
+                // ignore
+            }
+            catch (Exception ex)
+            {
+                Log($"AutoSwitch error: {ex.Message}");
+            }
+            finally
+            {
+                autoSwitchGate.Release();
+            }
+        }
+
 
 
         private void UIDisable()
@@ -990,7 +1086,7 @@ namespace AutoDNS
 
             Log("\r\n完成。若應用程式/瀏覽器仍未生效，請嘗試重新連線或清除 DNS 快取：ipconfig /flushdns");
 
-            if (prevDnsProvider != "")
+            if (prevDnsProvider != "" && caller != nameof(autoDnsSwitch))
             {
                 Program.ShowDarkInfo(this, $"已套用：{profile.Name} DNS\n", "AutoDNS");
             }
@@ -1006,6 +1102,8 @@ namespace AutoDNS
             }
 
             isPerforming = false;
+
+            if (!chkAutoSwitch.AutoCheck) chkAutoSwitch.AutoCheck = true; //allow user to check after first successful apply
 
         }
 
