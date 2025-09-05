@@ -648,7 +648,44 @@ namespace AutoDNS
         //
         // 4. didn't block click enable/disable autoSwitch when applying dns, although will block at autoSwitch func but the click state will be wrong
         // ::fixed by canCheckAutoSwitch function
+        //
+        // 5. queryResponseTime function does not show dns name
 
+        private async Task queryResponseTime()
+        {
+            var script =
+              @"$servers=@(""94.140.14.14"",""168.95.1.1"",""1.1.1.1"",""8.8.8.8"")
+                $domains=@(
+                ""www.youtube.com"",        # Google CDN
+                ""store.steampowered.com"", # Valve
+                ""www.netflix.com"",        # Multiple CDN
+                ""assets1.xboxlive.com"",   # Microsoft CDN
+                ""cdn.cloudflare.steamstatic.com"" # Cloudflare
+                )
+
+                $result=@()
+                foreach($s in $servers){
+                    foreach($d in $domains){
+                        $times=@()
+                        1..10 | % {
+                            $t=(Measure-Command {
+                                Resolve-DnsName -Server $s $d -Type A -NoHostsFile -ErrorAction SilentlyContinue
+                            }).TotalMilliseconds
+                            $times+=$t
+                        }
+                        $stat=$times | Measure-Object -Average -Minimum -Maximum
+                        $result += [pscustomobject]@{
+                            Server=$s; Domain=$d
+                            Avg=[math]::Round($stat.Average,3)
+                            # Min=[math]::Round($stat.Minimum,3)
+                            # Max=[math]::Round($stat.Maximum,3)
+                        }
+                    }
+                }
+                $result | Sort-Object Domain,Avg | Format-Table -Auto";
+            
+            await RunPowerShellAsync(script);
+        }
 
         private void canCheckAutoSwitch()
         {
@@ -1176,6 +1213,8 @@ namespace AutoDNS
 
             isPerforming = false;
             canCheckAutoSwitch();
+
+            queryResponseTime();
 
             //if (!chkAutoSwitch.AutoCheck)
             //{
