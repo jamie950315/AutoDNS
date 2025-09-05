@@ -263,6 +263,7 @@ namespace AutoDNS
         private static Dictionary<string, string> exePathListKVP = new Dictionary<string, string>();
         private static string prevDnsProvider = ""; //only saves manually selected DNS, leave as empty for initial run no prompt
         private static string realConnectedDns = "";    //saves the actually connected DNS, used for switching back when no exe is running
+        private static string lastApplySignature = "";  
 
 
         //for custom time interval
@@ -1083,13 +1084,6 @@ namespace AutoDNS
 
             if (DeadLockCheck()) return;
 
-            if (checkIfSameDns(realConnectedDns, CurrentProfile().Name))
-            {
-                return;
-            }
-            
-            realConnectedDns = CurrentProfile().Name;
-
             var selected = clbIfaces.CheckedItems.Cast<InterfaceItem>().ToList();
             if (selected.Count == 0)
             {
@@ -1097,10 +1091,21 @@ namespace AutoDNS
                 return;
             }
 
+            var profile = CurrentProfile();
+            string sig = profile.Name + "|" + string.Join(",", selected.Select(i => i.Id).OrderBy(x => x));
+
+            if (sig == lastApplySignature)
+            {
+                Log("Same DNS and interface as before, no need to re-apply.");
+                Program.ShowDarkInfo(this, "目前的 DNS 及介面卡與上次相同，無需重新套用。", "AutoDNS");
+                return;
+            }
+
             isPerforming = true;
             canCheckAutoSwitch();
 
-            var profile = CurrentProfile();
+            realConnectedDns = CurrentProfile().Name;
+            lastApplySignature = sig;
 
             if (chkDhcp.Checked)
             {
@@ -1111,7 +1116,7 @@ namespace AutoDNS
                     Log($"SAVED PREVDNS: {prevDnsProvider}");
                 }
                 isPerforming = false;
-                await SetDhcpAsync(selected);
+                await SetDhcpAsync(selected, caller);
                 return;
             }
 
@@ -1180,7 +1185,7 @@ namespace AutoDNS
             //}
         }
 
-        private async Task SetDhcpAsync(List<InterfaceItem> selected)
+        private async Task SetDhcpAsync(List<InterfaceItem> selected, [CallerMemberName] string? caller = null)
         {
 
             if (DeadLockCheck()) return;
@@ -1218,7 +1223,10 @@ namespace AutoDNS
             }
             Log("\r\n完成。若應用程式/瀏覽器仍未生效，請嘗試重新連線或清除 DNS 快取：ipconfig /flushdns");
 
-            Program.ShowDarkInfo(this, "已切換為自動取得 (DHCP)\n", "AutoDNS");
+            if (caller != nameof(autoDnsSwitch))
+            {
+                Program.ShowDarkInfo(this, "已切換為自動取得 (DHCP)\n", "AutoDNS");
+            }
 
             isPerforming = false;
             canCheckAutoSwitch();
