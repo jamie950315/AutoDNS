@@ -452,11 +452,12 @@ namespace AutoDNS
             //enable/disable auto switch
             chkAutoSwitch = new CheckBox { Left = 15, Top = 10, Width = 200, Text = "啟用/停用自動切換DNS" };
             chkAutoSwitch.Checked = false;
-            chkAutoSwitch.AutoCheck = false;    //prevent user from clicking before connect to AdGuard from initial run
-            chkAutoSwitch.Cursor = Cursors.No;
-            chkAutoSwitch.ForeColor = TextBg;
+            //chkAutoSwitch.AutoCheck = false;    //prevent user from clicking before connect to AdGuard from initial run
+            //chkAutoSwitch.Cursor = Cursors.No;
+            //chkAutoSwitch.ForeColor = TextBg;
             chkAutoSwitch.CheckedChanged += (s, e) =>
             {
+                canCheckAutoSwitch();
                 if (chkAutoSwitch.Checked)
                 {
                     if (!isAutoSwitchEnabled) enableAutoSwitch();
@@ -645,8 +646,30 @@ namespace AutoDNS
         // :: too lazy to do it rn, will do it later idk
         //
         // 4. didn't block click enable/disable autoSwitch when applying dns, although will block at autoSwitch func but the click state will be wrong
+        // ::fixed by canCheckAutoSwitch function
 
 
+        private void canCheckAutoSwitch()
+        {
+            Color TextFg = Color.White;
+            Color TextBg = Color.DimGray;
+
+            if (isAutoSwitchEnabled) return; //prevent changing state when autoSwitch is already enabled
+
+            if (!isPerforming)
+            {
+                chkAutoSwitch.AutoCheck = true;
+                chkAutoSwitch.Cursor = Cursors.Default;
+                chkAutoSwitch.ForeColor = TextFg;
+            }
+            else
+            {
+                chkAutoSwitch.Checked = false;
+                chkAutoSwitch.AutoCheck = false;
+                chkAutoSwitch.Cursor = Cursors.No;
+                chkAutoSwitch.ForeColor = TextBg;
+            }
+        }
 
         private void enableAutoSwitch()
         {
@@ -663,7 +686,6 @@ namespace AutoDNS
             autoSwitchCts = new CancellationTokenSource();
             autoSwitchTask = runAutoSwitchLoopAsync(autoSwitchCts.Token); // 不阻塞 UI
         }
-
 
         private async Task autoDnsSwitch()
         {
@@ -809,8 +831,6 @@ namespace AutoDNS
                 autoSwitchGate.Release();
             }
         }
-
-
 
         private void UIDisable()
         {
@@ -1078,6 +1098,7 @@ namespace AutoDNS
             }
 
             isPerforming = true;
+            canCheckAutoSwitch();
 
             var profile = CurrentProfile();
 
@@ -1149,13 +1170,14 @@ namespace AutoDNS
             }
 
             isPerforming = false;
+            canCheckAutoSwitch();
 
-            if (!chkAutoSwitch.AutoCheck)
-            {
-                chkAutoSwitch.AutoCheck = true; //allow user to check after first successful apply
-                chkAutoSwitch.Cursor = Cursors.Default;
-                chkAutoSwitch.ForeColor = Color.White;  //TextFg
-            }
+            //if (!chkAutoSwitch.AutoCheck)
+            //{
+            //    chkAutoSwitch.AutoCheck = true; //allow user to check after first successful apply
+            //    chkAutoSwitch.Cursor = Cursors.Default;
+            //    chkAutoSwitch.ForeColor = Color.White;  //TextFg
+            //}
         }
 
         private async Task SetDhcpAsync(List<InterfaceItem> selected)
@@ -1170,6 +1192,7 @@ namespace AutoDNS
             }
 
             isPerforming = true;
+            canCheckAutoSwitch();
 
             Log("\r\n=== 恢復自動取得(DHCP) ===");
             foreach (var nic in selected)
@@ -1198,6 +1221,7 @@ namespace AutoDNS
             Program.ShowDarkInfo(this, "已切換為自動取得 (DHCP)\n", "AutoDNS");
 
             isPerforming = false;
+            canCheckAutoSwitch();
         }
 
         private async Task ShowDnsAsync()
