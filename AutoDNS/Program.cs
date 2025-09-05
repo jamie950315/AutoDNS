@@ -1379,9 +1379,18 @@ namespace AutoDNS
 
         private void Log(string msg)
         {
-            if (txtLog.InvokeRequired)
-            { txtLog.Invoke(new Action<string>(Log), msg); return; }
+            if (txtLog.InvokeRequired) { 
+                txtLog.Invoke(new Action<string>(Log), msg);
+                return; 
+            }
             txtLog.AppendText(msg + Environment.NewLine);
+            const int maxLines = 1000;
+            if (txtLog.Lines.Length > maxLines)
+            {
+                txtLog.Lines = txtLog.Lines.Skip(maxLines/2).ToArray();
+                txtLog.SelectionStart = txtLog.TextLength;
+                txtLog.ScrollToCaret();
+            }
         }
     
     }
