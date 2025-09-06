@@ -1,22 +1,23 @@
 # AutoDNS
 
 一鍵切換/測試/自動化管理 Windows 的 DNS。支援指定網路介面、DHCP、IPv4/IPv6，一鍵清快取、量測解析延遲，並可依執行中的程式自動切換到對應的 DNS。
+[Latest Release](https://github.com/jamie950315/AutoDNS/releases/latest)
 
 
 ---
 
 ## 特色
 
-* ✅ 一鍵套用 DNS：AdGuard / HiNet / Cloudflare / Google 或切回 DHCP
-* ✅ 多介面選取：乙太網路、Wi‑Fi（可選進階/虛擬/撥接）
-* ✅ IPv6 自動啟用：未啟用時自動打開綁定
-* ✅ 解析延遲量測：內建 PowerShell 腳本，多網域 × 多 DNS 比較，最低值會標記 `*`
-* ✅ 自動切換 DNS：監控指定 .exe，對應不同 DNS；支援拖曳調整優先順序
-* ✅ 深色 UI、固定視窗大小、可顯示/收合紀錄面板（最多保留 1000 行）
+*  一鍵套用 DNS：AdGuard / HiNet / Cloudflare / Google 或切回 DHCP
+*  多介面選取：乙太網路、Wi‑Fi（可選進階/虛擬/撥接）
+*  IPv6 自動啟用：未啟用時自動打開綁定
+*  解析延遲量測：內建 PowerShell 腳本，多網域 × 多 DNS 比較，最低值會標記 `*`
+*  自動切換 DNS：監控指定 .exe，對應不同 DNS；支援拖曳調整優先順序
+*  深色 UI、固定視窗大小、可顯示/收合紀錄面板（最多保留 1000 行）
 
 ---
 
-## 適合誰
+## 適合人群
 
 * 想在**一般網站**過濾廣告的人（透過 **AdGuard DNS**）。
 
@@ -45,7 +46,7 @@
 
 此應用程式**未購買程式碼簽章憑證**，第一次執行時 Windows 可能跳出 SmartScreen 警告。
 
-確認執行檔來源可信（可自行編譯或直接在Release頁面下載）：
+確認執行檔來源可信（可自行編譯或直接在 [Releases](https://github.com/jamie950315/AutoDNS/releases/latest) 頁面下載）：
 
 1. 在 SmartScreen 視窗點擊 **「其他資訊」**。
 2. 點擊 **「仍要執行」**（Run anyway）。
