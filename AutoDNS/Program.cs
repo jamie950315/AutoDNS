@@ -244,7 +244,7 @@ namespace AutoDNS
 
         private Label lbSelectInterface = new Label { Left = rightPanelStartX, Top = 15, Width = 540, Text = "選擇要套用的網路介面 (乙太網路 / Wi‑Fi / 進階可選)：" };
         private Label logTitle = new Label { Left = rightPanelStartX, Top = 15, Width = 540, Text = "輸出紀錄：" };
-        private Label lbIntervalAdjust = new Label { Left = 212, Top = 13, Width = 100, Text = "掃描間隔：" };
+        private Label lbIntervalAdjust = new Label { Left = 187, Top = 13, Width = 140, Text = "掃描間隔秒數：" };
 
         //Panel edges
         private static int leftPanelEndX = 466;
@@ -519,6 +519,7 @@ namespace AutoDNS
             {
                 InitInterfaces();
                 ApplyAsync();
+                exePathListKVP = ProviderLookup.OutputKeyValuePair();
             };
             chkSelectAll.CheckedChanged += (s, e) => SelectAllUpInterfaces(chkSelectAll.Checked);
             chkIncludeAdvanced.CheckedChanged += (s, e) => InitInterfaces();
@@ -526,7 +527,7 @@ namespace AutoDNS
             controlLogUI(false);
             UpdateProviderEnable();
             
-            exePathListKVP = ProviderLookup.OutputKeyValuePair();
+            
         }
 
 
@@ -687,19 +688,31 @@ namespace AutoDNS
 
         internal sealed class ExePathEditorForm : Form
         {
+            // 資料模型（用 BindingList 保持順序並便於重排）
+            private sealed class ExePathItem
+            {
+                public string Directory { get; set; } = "";
+                public string Value { get; set; } = "";
+            }
+
             private readonly DataGridView grid = new DataGridView();
             private readonly TextBox txtDir = new TextBox();
             private readonly ComboBox cmbValue = new ComboBox();
             private readonly Button btnApply = new Button();
             private readonly Button btnSave = new Button();
-            private readonly Button btnCancel = new Button();
+            private readonly Button btnClose = new Button();
             private readonly Button btnEdit = new Button();
             private readonly Button btnDelete = new Button();
             private readonly Label lblDir = new Label();
             private readonly Label lblVal = new Label();
 
-            private Dictionary<string, string> map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            private readonly BindingList<ExePathItem> items = new BindingList<ExePathItem>();
             private string jsonPath = "";
+
+            // 拖曳重排狀態
+            private Rectangle dragBoxFromMouseDown = Rectangle.Empty;
+            private int rowIndexFromMouseDown = -1;
+            private bool modified = false;
 
             public ExePathEditorForm()
             {
@@ -707,55 +720,65 @@ namespace AutoDNS
                 StartPosition = FormStartPosition.CenterParent;
                 MinimizeBox = false; MaximizeBox = false;
                 FormBorderStyle = FormBorderStyle.FixedDialog;
-                Width = 900; Height = 580;
+                Width = 900; Height = 600;
 
+                // Grid
                 grid.ReadOnly = true;
                 grid.AllowUserToAddRows = false;
                 grid.AllowUserToDeleteRows = false;
                 grid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+                grid.MultiSelect = false;
                 grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
                 grid.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-                grid.Top = 10; grid.Left = 10; grid.Width = 860; grid.Height = 330;
-                grid.MultiSelect = false;
+                grid.Top = 10; grid.Left = 10; grid.Width = 860; grid.Height = 340;
+                grid.DataSource = items;
+                grid.AllowDrop = true;
                 grid.CellDoubleClick += (s, e) => LoadSelectedRowToInputs();
+                grid.MouseDown += Grid_MouseDown;
+                grid.MouseMove += Grid_MouseMove;
+                grid.DragOver += Grid_DragOver;
+                grid.DragDrop += Grid_DragDrop;
 
+                // Inputs
                 lblDir.Text = "Directory(.exe 路徑)：";
-                lblDir.Top = 350; lblDir.Left = 10; lblDir.Width = 160;
+                lblDir.Top = 360; lblDir.Left = 10; lblDir.Width = 180;
 
-                txtDir.Top = 372; txtDir.Left = 10; txtDir.Width = 670; txtDir.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+                txtDir.Top = 382; txtDir.Left = 10; txtDir.Width = 670; txtDir.Anchor = AnchorStyles.Left | AnchorStyles.Right;
 
-                lblVal.Text = "DNS：";
-                lblVal.Top = 350; lblVal.Left = 690; lblVal.Width = 60;
+                lblVal.Text = "Value：";
+                lblVal.Top = 360; lblVal.Left = 690; lblVal.Width = 60;
 
-                cmbValue.Top = 372; cmbValue.Left = 690; cmbValue.Width = 180;
+                cmbValue.Top = 382; cmbValue.Left = 690; cmbValue.Width = 180;
                 cmbValue.DropDownStyle = ComboBoxStyle.DropDownList;
                 cmbValue.Items.AddRange(new object[] { "Cloudflare", "Google", "AdGuard", "HiNet" });
 
+                // Row ops
                 btnEdit.Text = "編輯(載入下方)";
-                btnEdit.Top = 415; btnEdit.Left = 10; btnEdit.Width = 170;
+                btnEdit.Top = 420; btnEdit.Left = 10; btnEdit.Width = 170;
                 btnEdit.Anchor = AnchorStyles.Left | AnchorStyles.Bottom;
                 btnEdit.Click += OnEdit;
 
                 btnDelete.Text = "刪除選取列";
-                btnDelete.Top = 415; btnDelete.Left = 190; btnDelete.Width = 140;
+                btnDelete.Top = 420; btnDelete.Left = 190; btnDelete.Width = 140;
                 btnDelete.Anchor = AnchorStyles.Left | AnchorStyles.Bottom;
                 btnDelete.Click += OnDelete;
 
+                // Bottom buttons
                 btnApply.Text = "Apply";
-                btnApply.Top = 460; btnApply.Left = 470; btnApply.Width = 120;
+                btnApply.Top = 500; btnApply.Left = 470; btnApply.Width = 120;
                 btnApply.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
                 btnApply.Click += OnApply;
 
                 btnSave.Text = "Save";
-                btnSave.Top = 460; btnSave.Left = 600; btnSave.Width = 120;
+                btnSave.Top = 500; btnSave.Left = 600; btnSave.Width = 120;
                 btnSave.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
                 btnSave.Click += OnSave;
 
-                btnCancel.Text = "Cancel";
-                btnCancel.Top = 460; btnCancel.Left = 730; btnCancel.Width = 140;
-                btnCancel.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
-                btnCancel.DialogResult = DialogResult.Cancel;
-                btnCancel.Click += OnCancel;
+                btnClose.Text = "Close";
+                btnClose.Top = 500; btnClose.Left = 730; btnClose.Width = 140;
+                btnClose.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
+                btnClose.DialogResult = DialogResult.Cancel;
+                btnClose.Click += OnClose;
 
                 Controls.Add(grid);
                 Controls.Add(lblDir);
@@ -766,75 +789,112 @@ namespace AutoDNS
                 Controls.Add(btnDelete);
                 Controls.Add(btnApply);
                 Controls.Add(btnSave);
-                Controls.Add(btnCancel);
+                Controls.Add(btnClose);
 
                 Load += OnLoad;
             }
 
             private void OnLoad(object sender, EventArgs e)
             {
-
                 try
                 {
                     var exePath = Environment.ProcessPath ?? Application.ExecutablePath;
                     var exeDir = Path.GetDirectoryName(exePath) ?? AppDomain.CurrentDomain.BaseDirectory;
                     jsonPath = Path.Combine(exeDir, "exePath.json");
 
+                    items.Clear();
+
                     if (File.Exists(jsonPath))
                     {
-                        var json = File.ReadAllText(jsonPath);
-                        map = JsonSerializer.Deserialize<Dictionary<string, string>>(json)
-                             ?? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                        // 用 JsonDocument 依「檔案中屬性出現順序」讀入
+                        using var doc = JsonDocument.Parse(File.ReadAllText(jsonPath));
+                        if (doc.RootElement.ValueKind == JsonValueKind.Object)
+                        {
+                            foreach (var prop in doc.RootElement.EnumerateObject())
+                            {
+                                items.Add(new ExePathItem
+                                {
+                                    Directory = prop.Name,
+                                    Value = prop.Value.ValueKind == JsonValueKind.String ? (prop.Value.GetString() ?? "") : prop.Value.ToString()
+                                });
+                            }
+                        }
                     }
-                    else
-                    {
-                        map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    }
-
-                    BindGrid();
+                    // 若不存在檔案 -> 空列表，等待新增
                 }
                 catch (Exception ex)
                 {
                     MessageBox.Show(this, $"載入 exePath.json 失敗：{ex.Message}", "Error",
                         MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                    BindGrid();
                 }
             }
 
-            private void BindGrid(string? selectKey = null)
+            // ===== Drag & Drop 重排 =====
+            private void Grid_MouseDown(object? sender, MouseEventArgs e)
             {
-
-                var rows = map.Select(kv => new { Directory = kv.Key, Value = kv.Value }).OrderBy(r => r.Directory).ToList();
-                grid.DataSource = rows;
-
-                if (selectKey != null)
+                rowIndexFromMouseDown = grid.HitTest(e.X, e.Y).RowIndex;
+                if (rowIndexFromMouseDown != -1)
                 {
-                    foreach (DataGridViewRow row in grid.Rows)
+                    var dragSize = SystemInformation.DragSize;
+                    dragBoxFromMouseDown = new Rectangle(
+                        new Point(e.X - dragSize.Width / 2, e.Y - dragSize.Height / 2),
+                        dragSize
+                    );
+                }
+                else dragBoxFromMouseDown = Rectangle.Empty;
+            }
+
+            private void Grid_MouseMove(object? sender, MouseEventArgs e)
+            {
+                if ((e.Button & MouseButtons.Left) == MouseButtons.Left)
+                {
+                    if (dragBoxFromMouseDown != Rectangle.Empty && !dragBoxFromMouseDown.Contains(e.X, e.Y))
                     {
-                        if (row.DataBoundItem is not null)
-                        {
-                            var dir = row.Cells["Directory"].Value?.ToString();
-                            if (string.Equals(dir, selectKey, StringComparison.OrdinalIgnoreCase))
-                            {
-                                row.Selected = true;
-                                grid.CurrentCell = row.Cells["Directory"];
-                                break;
-                            }
-                        }
+                        grid.DoDragDrop(grid.Rows[rowIndexFromMouseDown], DragDropEffects.Move);
                     }
                 }
             }
 
-            private void OnEdit(object? sender, EventArgs e)
+            private void Grid_DragOver(object? sender, DragEventArgs e)
             {
-
-                LoadSelectedRowToInputs();
+                e.Effect = DragDropEffects.Move;
             }
+
+            private void Grid_DragDrop(object? sender, DragEventArgs e)
+            {
+                var clientPoint = grid.PointToClient(new Point(e.X, e.Y));
+                int dropIndex = grid.HitTest(clientPoint.X, clientPoint.Y).RowIndex;
+                if (dropIndex < 0) dropIndex = items.Count - 1;
+
+                if (rowIndexFromMouseDown < 0 || dropIndex < 0 || rowIndexFromMouseDown == dropIndex) return;
+
+                // 取出被拖曳的項目
+                var moved = items[rowIndexFromMouseDown];
+                items.RemoveAt(rowIndexFromMouseDown);
+
+                // 移除後，若往下拖，需要把目標索引 -1
+                if (dropIndex > rowIndexFromMouseDown) dropIndex--;
+
+                if (dropIndex < 0) dropIndex = 0;
+                if (dropIndex > items.Count) dropIndex = items.Count;
+
+                items.Insert(dropIndex, moved);
+
+                grid.ClearSelection();
+                grid.Rows[dropIndex].Selected = true;
+                grid.CurrentCell = grid.Rows[dropIndex].Cells[0];
+
+                // 清除拖曳狀態
+                rowIndexFromMouseDown = -1;
+                dragBoxFromMouseDown = Rectangle.Empty;
+                modified = true;
+            }
+
+            // ===== Row 操作 =====
+            private void OnEdit(object? sender, EventArgs e) => LoadSelectedRowToInputs();
 
             private void LoadSelectedRowToInputs()
             {
-
                 if (grid.CurrentRow == null)
                 {
                     MessageBox.Show(this, "先選取一列再按「編輯」", "提示",
@@ -851,114 +911,134 @@ namespace AutoDNS
 
             private void OnDelete(object? sender, EventArgs e)
             {
-
                 if (grid.CurrentRow == null)
                 {
                     MessageBox.Show(this, "先選取一列再按「刪除」", "提示",
                         MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
-
                 var dir = grid.CurrentRow.Cells["Directory"].Value?.ToString();
                 if (string.IsNullOrEmpty(dir)) return;
 
                 var confirm = MessageBox.Show(this, $"確定刪除？\n{dir}", "確認刪除",
                     MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
-
                 if (confirm != DialogResult.Yes) return;
 
-                if (map.Remove(dir))
+                for (int i = 0; i < items.Count; i++)
                 {
-                    try
+                    if (string.Equals(items[i].Directory, dir, StringComparison.OrdinalIgnoreCase))
                     {
-                        SaveJson();
-                        BindGrid();
-                        if (string.Equals(txtDir.Text, dir, StringComparison.OrdinalIgnoreCase))
-                        {
-                            txtDir.Clear();
-                            cmbValue.SelectedIndex = -1;
-                            cmbValue.Text = "";
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show(this, $"刪除後寫檔失敗：{ex.Message}", "Error",
-                            MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        items.RemoveAt(i);
+                        break;
                     }
                 }
+                txtDir.Clear();
+                cmbValue.SelectedIndex = -1;
+                modified = true;
             }
 
+            // ===== 底部三鍵 =====
             private void OnApply(object? sender, EventArgs e)
             {
+                if (!UpsertFromInputs()) return;
+                try { SaveJson(); }
+                catch (Exception ex)
+                { MessageBox.Show(this, $"寫入 exePath.json 失敗：{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+                // don't close window
 
-                if (!ApplyChanges()) return;
-                // don't close the window
+                exePathListKVP = ProviderLookup.OutputKeyValuePair();
             }
 
             private void OnSave(object? sender, EventArgs e)
             {
-
-                if (!ApplyChanges()) return;
+                if (!UpsertFromInputs()) { /* don't close window */ return; }
+                try { SaveJson(); }
+                catch (Exception ex)
+                { MessageBox.Show(this, $"寫入 exePath.json 失敗：{ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); return; }
                 DialogResult = DialogResult.OK;
                 Close();
+
+                exePathListKVP = ProviderLookup.OutputKeyValuePair();
             }
 
-            private void OnCancel(object? sender, EventArgs e)
+            private void OnClose(object? sender, EventArgs e)
             {
-
-                // don't save changes
                 DialogResult = DialogResult.Cancel;
                 Close();
+
+                exePathListKVP = ProviderLookup.OutputKeyValuePair();
             }
 
-            private bool ApplyChanges()
+            // 新增或更新（不改變順序；不存在則附加在最後）
+            private bool UpsertFromInputs()
             {
+                var dir = txtDir.Text.Trim();
+                var val = cmbValue.Text.Trim();
 
-                try
+                if (string.IsNullOrWhiteSpace(dir) && modified == false)
                 {
-                    var dir = txtDir.Text.Trim();
-                    var val = cmbValue.Text.Trim();
-
-                    if (string.IsNullOrWhiteSpace(dir))
-                    {
-                        MessageBox.Show(this, "請輸入 directory(完整 .exe 路徑)", "Oops",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return false;
-                    }
-                    if (string.IsNullOrWhiteSpace(val))
-                    {
-                        MessageBox.Show(this, "請選擇/輸入 DNS", "Oops",
-                            MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                        return false;
-                    }
-
-                    map[dir] = val;
-                    SaveJson();
-                    BindGrid(selectKey: dir);
-                    return true;
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(this, $"寫入 exePath.json 失敗：{ex.Message}", "Error",
-                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show(this, "請輸入 directory(完整 .exe 路徑)", "Oops",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return false;
                 }
+                if (string.IsNullOrWhiteSpace(val) && modified == false)
+                {
+                    MessageBox.Show(this, "請選擇/輸入 value", "Oops",
+                        MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return false;
+                }
+
+                for (int i = 0; i < items.Count; i++)
+                {
+                    if (string.Equals(items[i].Directory, dir, StringComparison.OrdinalIgnoreCase))
+                    {
+                        items[i].Value = val; // 更新原位，不動順序
+                        grid.Refresh(); // 確保畫面更新
+                        grid.ClearSelection();
+                        grid.Rows[i].Selected = true;
+                        grid.CurrentCell = grid.Rows[i].Cells[0];
+                        return true;
+                    }
+                }
+                // 沒找到 -> 追加在最後
+                items.Add(new ExePathItem { Directory = dir, Value = val });
+                grid.ClearSelection();
+                var idx = items.Count - 1;
+                grid.Rows[idx].Selected = true;
+                grid.CurrentCell = grid.Rows[idx].Cells[0];
+                return true;
             }
 
+            // 以「目前列表順序」輸出為 JSON 物件（保持屬性順序）
             private void SaveJson()
             {
+                Directory.CreateDirectory(Path.GetDirectoryName(jsonPath)!);
 
-                var options = new JsonSerializerOptions { WriteIndented = true };
-                var json = JsonSerializer.Serialize(map, options);
-                File.WriteAllText(jsonPath, json);
+                using var fs = new FileStream(jsonPath, FileMode.Create, FileAccess.Write, FileShare.None);
+                using var writer = new Utf8JsonWriter(fs, new JsonWriterOptions { Indented = true, SkipValidation = false, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
+                writer.WriteStartObject();
+                foreach (var it in items)
+                {
+                    writer.WriteString(it.Directory, it.Value);
+                }
+                writer.WriteEndObject();
+                writer.Flush();
+
             }
         }
 
-
         private async Task queryResponseTime()
         {
+            if (isAutoSwitchEnabled)
+            {
+                Program.ShowDarkInfo(this, "請先停用自動切換 DNS 後再進行測試。", "AutoDNS");
+                return;
+            }
+
             if (DeadLockCheck()) return;
             isPerforming = true;
+
+            canCheckAutoSwitch();
 
             controlLogUI(true);
             expandWindow(true);
@@ -1044,6 +1124,7 @@ namespace AutoDNS
             await RunPowerShellAsync(script);
 
             isPerforming = false;
+            canCheckAutoSwitch();
         }
 
         private void canCheckAutoSwitch()
@@ -1123,7 +1204,7 @@ namespace AutoDNS
 
             async Task DnsSwitcher(string targetDns)
             {
-
+                
                 if (!checkIfSameDns(CurrentProfile().Name, targetDns))
                 {
                     isPerforming = false;   //release lock to avoid deadlock in ApplyAsync
@@ -1260,8 +1341,8 @@ namespace AutoDNS
             intervalAdjust.Enabled = false;
             lbIntervalAdjust.ForeColor = TextBg;
 
-            btnExePathCustomize.Cursor = Cursors.No;
-            btnExePathCustomize.ForeColor = TextBg;
+            btnExePathCustomize.Enabled = false;
+            
 
         }
 
@@ -1298,8 +1379,8 @@ namespace AutoDNS
             intervalAdjust.Enabled = true;
             lbIntervalAdjust.ForeColor = TextFg;
 
-            btnExePathCustomize.Cursor = Cursors.Default;
-            btnExePathCustomize.ForeColor = TextFg;
+            btnExePathCustomize.Enabled = true;
+            
 
         }
 
@@ -1404,6 +1485,7 @@ namespace AutoDNS
             if(OGDns == NBDns)
             {
                 Log("Same DNS provider as before, no need to re-apply.");
+                switchCheckProfile(OGDns);
                 return true;
             }
             else
@@ -1500,7 +1582,7 @@ namespace AutoDNS
             var profile = CurrentProfile();
             string sig = profile.Name + "|" + string.Join(",", selected.Select(i => i.Id).OrderBy(x => x));
 
-            if (sig == lastApplySignature)
+            if (sig == lastApplySignature && caller != nameof(autoDnsSwitch))
             {
                 Log("Same DNS and interface as before, no need to re-apply.");
                 Program.ShowDarkInfo(this, "目前的 DNS 及介面卡與上次相同，無需重新套用。", "AutoDNS");
