@@ -668,7 +668,7 @@ namespace AutoDNS
         // 1. add custom dns profile
         //
         // 2. add custom exe path with simple UI
-        //
+        // :: done
         // 3. add custom domain to do queryResponseTime
         //
         // 4. monitor outgoing dns traffic to select dns profile
@@ -695,6 +695,29 @@ namespace AutoDNS
                 public string Value { get; set; } = "";
             }
 
+            // 調整欄寬：Directory 寬、Value 窄
+            private void AdjustColumnWidths()
+            {
+                if (grid.Columns.Count == 0) return;
+
+                var colDir = grid.Columns["Directory"];
+                var colVal = grid.Columns["Value"];
+
+                if (colDir != null)
+                {
+                    colDir.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+                    colDir.FillWeight = 85;        // 75% 寬度
+                    colDir.MinimumWidth = 350;     // 可自行調整
+                }
+                if (colVal != null)
+                {
+                    colVal.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+                    colVal.FillWeight = 15;        // 25% 寬度
+                    colVal.MinimumWidth = 50;     // 可自行調整
+                }
+            }
+
+
             private readonly DataGridView grid = new DataGridView();
             private readonly TextBox txtDir = new TextBox();
             private readonly ComboBox cmbValue = new ComboBox();
@@ -716,11 +739,11 @@ namespace AutoDNS
 
             public ExePathEditorForm()
             {
-                Text = "exePath.json 編輯器";
+                Text = "exePath.json Editor";
                 StartPosition = FormStartPosition.CenterParent;
                 MinimizeBox = false; MaximizeBox = false;
                 FormBorderStyle = FormBorderStyle.FixedDialog;
-                Width = 900; Height = 600;
+                Width = 720; Height = 500;
 
                 // Grid
                 grid.ReadOnly = true;
@@ -730,8 +753,9 @@ namespace AutoDNS
                 grid.MultiSelect = false;
                 grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
                 grid.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-                grid.Top = 10; grid.Left = 10; grid.Width = 860; grid.Height = 340;
+                grid.Top = 10; grid.Left = 10; grid.Width = 680; grid.Height = 340;
                 grid.DataSource = items;
+                grid.DataBindingComplete += (s, e) => AdjustColumnWidths();
                 grid.AllowDrop = true;
                 grid.CellDoubleClick += (s, e) => LoadSelectedRowToInputs();
                 grid.MouseDown += Grid_MouseDown;
@@ -743,17 +767,17 @@ namespace AutoDNS
                 lblDir.Text = "Directory(.exe 路徑)：";
                 lblDir.Top = 360; lblDir.Left = 10; lblDir.Width = 180;
 
-                txtDir.Top = 382; txtDir.Left = 10; txtDir.Width = 670; txtDir.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+                txtDir.Top = 382; txtDir.Left = 10; txtDir.Width = 580; txtDir.Anchor = AnchorStyles.Left | AnchorStyles.Right;
 
-                lblVal.Text = "Value：";
-                lblVal.Top = 360; lblVal.Left = 690; lblVal.Width = 60;
+                lblVal.Text = "DNS：";
+                lblVal.Top = 360; lblVal.Left = 600; lblVal.Width = 60;
 
-                cmbValue.Top = 382; cmbValue.Left = 690; cmbValue.Width = 180;
+                cmbValue.Top = 382; cmbValue.Left = 600; cmbValue.Width = 90;
                 cmbValue.DropDownStyle = ComboBoxStyle.DropDownList;
                 cmbValue.Items.AddRange(new object[] { "Cloudflare", "Google", "AdGuard", "HiNet" });
 
                 // Row ops
-                btnEdit.Text = "編輯(載入下方)";
+                btnEdit.Text = "編輯";
                 btnEdit.Top = 420; btnEdit.Left = 10; btnEdit.Width = 170;
                 btnEdit.Anchor = AnchorStyles.Left | AnchorStyles.Bottom;
                 btnEdit.Click += OnEdit;
@@ -764,18 +788,18 @@ namespace AutoDNS
                 btnDelete.Click += OnDelete;
 
                 // Bottom buttons
-                btnApply.Text = "Apply";
-                btnApply.Top = 500; btnApply.Left = 470; btnApply.Width = 120;
+                btnApply.Text = "應用";
+                btnApply.Top = 420; btnApply.Left = 380; btnApply.Width = 100;
                 btnApply.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
                 btnApply.Click += OnApply;
 
-                btnSave.Text = "Save";
-                btnSave.Top = 500; btnSave.Left = 600; btnSave.Width = 120;
+                btnSave.Text = "保存";
+                btnSave.Top = 420; btnSave.Left = 490; btnSave.Width = 100;
                 btnSave.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
                 btnSave.Click += OnSave;
 
-                btnClose.Text = "Close";
-                btnClose.Top = 500; btnClose.Left = 730; btnClose.Width = 140;
+                btnClose.Text = "關閉";
+                btnClose.Top = 420; btnClose.Left = 600; btnClose.Width = 90;
                 btnClose.Anchor = AnchorStyles.Right | AnchorStyles.Bottom;
                 btnClose.DialogResult = DialogResult.Cancel;
                 btnClose.Click += OnClose;
@@ -820,6 +844,7 @@ namespace AutoDNS
                             }
                         }
                     }
+                    AdjustColumnWidths();
                     // 若不存在檔案 -> 空列表，等待新增
                 }
                 catch (Exception ex)
