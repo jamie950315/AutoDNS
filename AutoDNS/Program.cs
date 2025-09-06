@@ -1,20 +1,11 @@
-﻿using Microsoft.VisualBasic.Logging;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
-using System.Drawing.Text;
-using System.Linq;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace AutoDNS
 {
@@ -50,7 +41,7 @@ namespace AutoDNS
         public static DialogResult ShowDarkInfo(Control owner, string text, string title = "訊息")
         {
 
-            // 跨執行緒安全呼叫
+            // cross-thread
             if (owner != null && owner.InvokeRequired)
             {
                 DialogResult r = DialogResult.None;
@@ -58,7 +49,7 @@ namespace AutoDNS
                 return r;
             }
 
-            // 色票
+            // colors
             Color DarkBg = Color.FromArgb(28, 28, 30);
             Color PanelBg = Color.FromArgb(38, 38, 42);
             Color TextFg = Color.White;
@@ -75,7 +66,7 @@ namespace AutoDNS
                 f.AutoScaleMode = AutoScaleMode.Dpi;
                 f.BackColor = DarkBg; f.ForeColor = TextFg;
 
-                // 佈局常數
+                // layout constants
                 const int minClientW = 100;
                 const int minClientH = 100;
                 const int iconLeft = 18;
@@ -83,7 +74,7 @@ namespace AutoDNS
                 const int iconSize = 40;
                 const int contentLeft = iconLeft + iconSize + 20; // 18+40+20
                 const int topPad = 20;
-                const int spacing = 20; // 內容與按鈕間距
+                const int spacing = 20;
                 const int rightPad = 18;
                 const int bottomPad = 18;
 
@@ -105,12 +96,12 @@ namespace AutoDNS
                     Height = iconSize
                 };
 
-                // 內容 Panel：啟用水平捲軸，不換行
+                
                 var content = new Panel
                 {
                     Left = contentLeft,
                     Top = topPad,
-                    Height = 30, // 先給單行高度，稍後 Reflow 會調
+                    Height = 30, 
                     BackColor = DarkBg,
                     //AutoScroll = true
                 };
@@ -231,7 +222,8 @@ namespace AutoDNS
         private CheckBox chkAutoSwitch;
         private GroupBox grpProvider;
         private RadioButton rbHiNet, rbCloudflare, rbGoogle;
-        private Button btnApplyDns, btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache, btnDoneSelect, btnClearLogs;
+        //also need to add in ApplyDarkMode.StyleButton and Controls.AddRange
+        private Button btnApplyDns, btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache, btnDoneSelect, btnClearLogs, btnQueryResponse; 
         private TextBox txtLog;
 
         // Logs toggle state (default OFF)
@@ -375,7 +367,7 @@ namespace AutoDNS
                 if (btnDoneSelect != null) StyleButton(btnDoneSelect, AccentBg, Color.White, AccentHover, AccentDown);
 
                 //add normal button here
-                foreach (var b in new[] { btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache })
+                foreach (var b in new[] { btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache, btnQueryResponse })
                 {
                     if (b != null) StyleButton(b, BtnBg, TextFg, BtnHover, BtnDown);
                 }
@@ -414,7 +406,9 @@ namespace AutoDNS
             btnRefreshInterface = new Button { Left = 122, Top = 265, Width = 98, Height = 30, Text = "掃描介面卡" };
             btnShowCurrentDns = new Button { Left = 230, Top = 265, Width = 97, Height = 30, Text = "顯示目前 DNS" };
             btnToggleLogs = new Button { Left = 337, Top = 265, Width = 98, Height = 30, Text = "顯示紀錄：關" };
-            btnApplyDns = new Button { Left = 15, Top = 305, Width = 420, Height = 30, Text = "套用設定" };
+            btnApplyDns = new Button { Left = 15, Top = 305, Width = 312, Height = 30, Text = "套用設定" };
+            btnQueryResponse = new Button { Left = 337, Top = 305, Width = 98, Height = 30, Text = "測試回應時間" };
+
 
             btnApplyDns.Click += async (s, e) => await ApplyAsync();
             btnRefreshInterface.Click += (s, e) => InitInterfaces();
@@ -422,6 +416,7 @@ namespace AutoDNS
             btnShowCurrentDns.Click += async (s, e) => await ShowDnsAsync();
             btnToggleLogs.Click += (s, e) => ToggleLogs();
             btnFlushDnsCache.Click += async (s, e) => await FlushDnsAsync();
+            btnQueryResponse.Click += async (s, e) => await queryResponseTime();
 
             // 設定介面選擇區
             clbIfaces = new CheckedListBox { Left = rightPanelStartX, Top = 40, Width = 400, Height = 255, CheckOnClick = true };    //Select network interfaces
@@ -453,9 +448,7 @@ namespace AutoDNS
             //enable/disable auto switch
             chkAutoSwitch = new CheckBox { Left = 15, Top = 10, Width = 200, Text = "啟用/停用自動切換DNS" };
             chkAutoSwitch.Checked = false;
-            //chkAutoSwitch.AutoCheck = false;    //prevent user from clicking before connect to AdGuard from initial run
-            //chkAutoSwitch.Cursor = Cursors.No;
-            //chkAutoSwitch.ForeColor = TextBg;
+
             chkAutoSwitch.CheckedChanged += (s, e) =>
             {
                 canCheckAutoSwitch();
@@ -493,7 +486,11 @@ namespace AutoDNS
 
 
             //add all controls to form
-            Controls.AddRange(new Control[] { lbSelectInterface, lbBottomBarInfo, clbIfaces, chkSelectAll, chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApplyDns, btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache, txtLog, btnDoneSelect, btnClearLogs, logTitle, intervalAdjust, chkAutoSwitch });
+            Controls.AddRange(new Control[] { lbSelectInterface, lbBottomBarInfo, clbIfaces, chkSelectAll
+                                            , chkIncludeAdvanced, chkAdGuard, chkDhcp, grpProvider, btnApplyDns
+                                            , btnRefreshInterface, btnShowCurrentDns, btnToggleLogs, btnFlushDnsCache
+                                            , txtLog, btnDoneSelect, btnClearLogs, logTitle, intervalAdjust
+                                            , chkAutoSwitch, btnQueryResponse });
 
 
             // load saved timerInterval
@@ -650,41 +647,114 @@ namespace AutoDNS
         // ::fixed by canCheckAutoSwitch function
         //
         // 5. queryResponseTime function does not show dns name
+        // ::fixed by adding dns name array
+        // hardcoded dns profiles for now, will make it dynamic later
+
+
+        //wish list:
+        // 1. add custom dns profile
+        //
+        // 2. add custom exe path with simple UI
+        //
+        // 3. add custom domain to do queryResponseTime
+        //
+        // 4. monitor outgoing dns traffic to select dns profile
+        //
+        // 5. use parallel dns for fastest response
+        //
+        // 6. add tray icon support and auto start with windows option
+
+
 
         private async Task queryResponseTime()
         {
-            var script =
-              @"$servers=@(""94.140.14.14"",""168.95.1.1"",""1.1.1.1"",""8.8.8.8"")
-                $domains=@(
-                ""www.youtube.com"",        # Google CDN
-                ""store.steampowered.com"", # Valve
-                ""www.netflix.com"",        # Multiple CDN
-                ""assets1.xboxlive.com"",   # Microsoft CDN
-                ""cdn.cloudflare.steamstatic.com"" # Cloudflare
-                )
+            if (DeadLockCheck()) return;
+            isPerforming = true;
 
-                $result=@()
-                foreach($s in $servers){
-                    foreach($d in $domains){
-                        $times=@()
-                        1..10 | % {
-                            $t=(Measure-Command {
-                                Resolve-DnsName -Server $s $d -Type A -NoHostsFile -ErrorAction SilentlyContinue
-                            }).TotalMilliseconds
-                            $times+=$t
-                        }
-                        $stat=$times | Measure-Object -Average -Minimum -Maximum
-                        $result += [pscustomobject]@{
-                            Server=$s; Domain=$d
-                            Avg=[math]::Round($stat.Average,3)
-                            # Min=[math]::Round($stat.Minimum,3)
-                            # Max=[math]::Round($stat.Maximum,3)
+            controlLogUI(true);
+            expandWindow(true);
+            controlInterfaceUI(false);
+
+            DnsProfile queryProfile1 = AdGuard;
+            DnsProfile queryProfile2 = HiNet;
+            DnsProfile queryProfile3 = Cloudflare;
+            DnsProfile queryProfile4 = Google;
+
+            var queryTimes = 10;
+
+            var script = $$"""
+                    
+                    $servers=@('{{queryProfile1.IPv4Primary}}','{{queryProfile2.IPv4Primary}}','{{queryProfile3.IPv4Primary}}','{{queryProfile4.IPv4Primary}}')
+                    $names=@('{{queryProfile1.Name}}','{{queryProfile2.Name}}','{{queryProfile3.Name}}','{{queryProfile4.Name}}')
+                    $domains=@(
+                      'youtube.com',                # Google CDN
+                      'store.steampowered.com',     # Valve
+                      'netflix.com',                # Multiple CDN
+                      'assets1.xboxlive.com',       # Microsoft CDN
+                      'cdn.cloudflare.steamstatic.com' # Cloudflare
+                    )
+
+                    $result=@()
+                    foreach($s in $servers){
+                        $idx=[Array]::IndexOf($servers,$s)
+                        foreach($d in $domains){
+                            $times=@()
+                            1..{{queryTimes}} | % {
+                                $t=(Measure-Command {
+                                    Resolve-DnsName -Server $s $d -Type A -NoHostsFile -ErrorAction SilentlyContinue
+                                }).TotalMilliseconds
+                                $times+=$t
+                            }
+                            $stat=$times | Measure-Object -Average -Minimum -Maximum
+                            $result += [pscustomobject]@{
+                                Domain=$d
+                                Name=$names[$idx]
+                                Avg=[math]::Round($stat.Average,3)
+                            }
                         }
                     }
-                }
-                $result | Sort-Object Domain,Avg | Format-Table -Auto";
-            
+
+                    $sorted=$result | Sort-Object Domain,Avg
+
+                    $mins=@{}
+                    $sorted | Group-Object Domain | ForEach-Object {
+                        $mins[$_.Name]=($_.Group | Measure-Object Avg -Minimum).Minimum
+                    }
+
+                    # add * to the minimum avg
+                    $fmt='{0,-30} {1,-12} {2,8}'
+                    Write-Host ($fmt -f 'Domain','Name','Avg')
+                    Write-Host ($fmt -f '------','----','---')
+
+                    $sorted | Group-Object Domain | ForEach-Object {
+                        $_.Group | ForEach-Object {
+                            $min=$mins[$_.Domain]
+                            $avgTxt = if($_.Avg -eq $min){ '{0}*' -f $_.Avg } else { '{0}' -f $_.Avg }
+                            Write-Host ($fmt -f $_.Domain, $_.Name, $avgTxt)
+                        }
+                        Write-Host "---"
+                    }
+
+
+
+
+
+
+                #  ================================================
+                #  ========== Querying DNS Response Time ==========
+                #  ====== May take some time, please wait... ======
+                #  ================================================
+                
+
+
+
+
+                """;
+
+
             await RunPowerShellAsync(script);
+
+            isPerforming = false;
         }
 
         private void canCheckAutoSwitch()
@@ -960,7 +1030,7 @@ namespace AutoDNS
             }
         }
 
-        void clearSelectedDns()
+        public void clearSelectedDns()
         {
             rbHiNet.Checked = false;
             rbCloudflare.Checked = false;
@@ -1214,14 +1284,6 @@ namespace AutoDNS
             isPerforming = false;
             canCheckAutoSwitch();
 
-            queryResponseTime();
-
-            //if (!chkAutoSwitch.AutoCheck)
-            //{
-            //    chkAutoSwitch.AutoCheck = true; //allow user to check after first successful apply
-            //    chkAutoSwitch.Cursor = Cursors.Default;
-            //    chkAutoSwitch.ForeColor = Color.White;  //TextFg
-            //}
         }
 
         private async Task SetDhcpAsync(List<InterfaceItem> selected, [CallerMemberName] string? caller = null)
