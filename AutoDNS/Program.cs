@@ -108,7 +108,7 @@ namespace AutoDNS
 
                 var lbl = new Label
                 {
-                    AutoSize = true,      // 單行，寬度跟著文字跑
+                    AutoSize = true,      // forced one line
                     BackColor = DarkBg,
                     ForeColor = TextFg,
                     Left = 0,
@@ -139,19 +139,19 @@ namespace AutoDNS
 
                 void Reflow()
                 {
-                    // 量測單行寬度（不包內距）
+                    // scale line width
                     int oneLineTextW = TextRenderer.MeasureText(
                         lbl.Text, lbl.Font, new Size(int.MaxValue, int.MaxValue),
                         TextFormatFlags.NoPadding).Width;
 
-                    // 期望的客戶區寬度（單行塞得下，或最多到螢幕上限）
+                    // expected ClientWidth
                     int desiredClientW = Math.Clamp(contentLeft + oneLineTextW + rightPad,
                                                     minClientW, maxClientW);
 
                     if (f.ClientSize.Width != desiredClientW)
                         f.ClientSize = new Size(desiredClientW+10, f.ClientSize.Height);
 
-                    // Panel 寬度 = 客戶區寬度扣掉左右邊
+                    // Panel width
                     content.Width = Math.Max(120, f.ClientSize.Width - contentLeft - rightPad);
                     content.Height = Math.Max(lbl.Height, 30); // 單行高度即可（不換行）
                                                                // Label 單行：AutoSize=true，不設定 MaximumSize → 絕不換行
@@ -202,7 +202,7 @@ namespace AutoDNS
         public override string ToString() => Name;
     }
 
-    // 封裝要顯示在清單裡的介面資訊（避免名稱衝突，改用 ifIndex 套用設定）
+    // encapsulation interface item for CheckedListBox
     public class InterfaceItem
     {
         public string Name { get; set; } = "";       // 介面顯示名稱（Alias）
@@ -261,11 +261,11 @@ namespace AutoDNS
         //for custom time interval
         private static double timerInterval = 5;
         private NumericUpDown intervalAdjust;
-        // 週期控制
+        // interval control
         private CancellationTokenSource? autoSwitchCts;
         private Task? autoSwitchTask;
         private TimeSpan autoPeriod = TimeSpan.FromSeconds(timerInterval);
-        // 防重入
+        // prevent multiple autoSwitch at the same time
         private readonly System.Threading.SemaphoreSlim autoSwitchGate = new(1, 1);
         
 
@@ -313,7 +313,7 @@ namespace AutoDNS
 
                 foreach (var rb in new[] { rbHiNet, rbCloudflare, rbGoogle })
                 {
-                    rb.AutoCheck = !locked;        // 鎖住選擇確保深色主題字色
+                    rb.AutoCheck = !locked;        // lock to ensure wont be changed, didnt use Enabled to avoid greyed out
                     rb.Cursor = locked ? Cursors.No : Cursors.Default;
                     rb.ForeColor = locked ? TextBg : TextFg;
                     rb.BackColor = DarkBg;
@@ -1066,7 +1066,7 @@ namespace AutoDNS
                     using var doc = JsonDocument.Parse(fs);
 
                     // expect：{ "C:\\exampleDir\\example.exe": "Cloudflare", ... }
-                    // 讀取時也把 JSON 裡的 Key 做路徑標準化，並用不分大小寫比較
+                    // also normalize path to full path without trailing slash
                     foreach (var prop in doc.RootElement.EnumerateObject())
                     {
                         string k = NormalizePath(prop.Name);
@@ -1078,8 +1078,8 @@ namespace AutoDNS
                     }
                 }
                 catch
-                {
-                    // JSON 壞掉或其他例外一律走預設
+                { 
+                
                 }
                 return map;
             }
@@ -1238,7 +1238,7 @@ namespace AutoDNS
                 // 確保 IPv6 已啟用
                 await EnsureIPv6BindingAsync(nic.Name);
 
-                // 使用 PowerShell 一次性覆蓋整個 DNS 清單（避免殘留）
+                // 使用 PowerShell 一次性覆蓋整個 DNS 清單
                 var v4Cmd = nic.IfIndex >= 0
                     ? $"Set-DnsClientServerAddress -InterfaceIndex {nic.IfIndex} -ServerAddresses \"{profile.IPv4Primary}\",\"{profile.IPv4Secondary}\""
                     : $"Set-DnsClientServerAddress -InterfaceAlias '{EscapeForPS(nic.Name)}' -ServerAddresses \"{profile.IPv4Primary}\",\"{profile.IPv4Secondary}\"";
@@ -1249,7 +1249,7 @@ namespace AutoDNS
                 var ec4 = await RunPowerShellAsync(v4Cmd);
                 if (ec4 != 0)
                 {
-                    // 後備：改用 netsh（IPv4）
+                    // fallback use netsh IPv4
                     await RunNetshAsync($"interface ipv4 set dns name=\"{nic.Name}\" static {profile.IPv4Primary} primary");
                     await RunNetshAsync($"interface ipv4 add dns name=\"{nic.Name}\" {profile.IPv4Secondary} index=2 validate=no");
                 }
@@ -1257,7 +1257,7 @@ namespace AutoDNS
                 var ec6 = await RunPowerShellAsync(v6Cmd);
                 if (ec6 != 0)
                 {
-                    // 後備：IPv6 清空 + 加入主/次
+                    // fallback use netsh IPv6
                     await RunNetshAsync($"interface ipv6 delete dnsservers name=\"{nic.Name}\" all");
                     await RunNetshAsync($"interface ipv6 add dnsserver name=\"{nic.Name}\" address={profile.IPv6Primary} index=1 validate=no");
                     await RunNetshAsync($"interface ipv6 add dnsserver name=\"{nic.Name}\" address={profile.IPv6Secondary} index=2 validate=no");
@@ -1352,7 +1352,7 @@ namespace AutoDNS
             {
                 Log($"介面：{nic.Name} (ifIndex={nic.IfIndex})");
 
-                // 以 PowerShell 為主，格式化輸出；若失敗再用 netsh 作為後備
+                // use powershell first, if fails fallback to netsh
                 string baseCmdIdx = nic.IfIndex >= 0 ? $"-InterfaceIndex {nic.IfIndex}" : $"-InterfaceAlias '{EscapeForPS(nic.Name)}'";
                 int e1 = await RunPowerShellAsync($"$a=(Get-DnsClientServerAddress {baseCmdIdx} -AddressFamily IPv4).ServerAddresses; Write-Host ('IPv4: ' + ($a -join ', '))");
                 int e2 = await RunPowerShellAsync($"$b=(Get-DnsClientServerAddress {baseCmdIdx} -AddressFamily IPv6).ServerAddresses; Write-Host ('IPv6: ' + ($b -join ', '))");
